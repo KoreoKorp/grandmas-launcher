@@ -1,0 +1,99 @@
+import React, { useState } from 'react'
+
+export default function DisplaySettings({ display, onSave }) {
+  const [fontScale, setFontScale] = useState(display.fontScale)
+  const [saved, setSaved] = useState(false)
+
+  const [newPin, setNewPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const [pinMsg, setPinMsg] = useState(null) // { ok, text }
+
+  async function saveFont() {
+    await onSave({ fontScale })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  async function savePin() {
+    if (newPin.length < 4) { setPinMsg({ ok: false, text: 'PIN must be at least 4 digits.' }); return }
+    if (newPin !== confirmPin) { setPinMsg({ ok: false, text: 'PINs do not match.' }); return }
+    await window.admin.set('adminPin', newPin)
+    setNewPin(''); setConfirmPin('')
+    setPinMsg({ ok: true, text: 'PIN saved!' })
+    setTimeout(() => setPinMsg(null), 3000)
+  }
+
+  async function clearPin() {
+    await window.admin.set('adminPin', '')
+    setPinMsg({ ok: true, text: 'PIN removed — admin panel is now open access.' })
+    setTimeout(() => setPinMsg(null), 4000)
+  }
+
+  return (
+    <div>
+      <h2>Display Settings</h2>
+      <div className="card">
+        <div className="field">
+          <label>Font Size</label>
+          <select value={fontScale} onChange={e => setFontScale(e.target.value)} style={{ width: 'auto' }}>
+            <option value="small">Small</option>
+            <option value="medium">Medium (default)</option>
+            <option value="large">Large</option>
+            <option value="xlarge">Extra Large</option>
+          </select>
+        </div>
+        <div className="row">
+          <button className="btn btn-primary" onClick={saveFont}>Save</button>
+          {saved && <span className="saved-notice">Saved!</span>}
+        </div>
+      </div>
+
+      <h2>Admin PIN</h2>
+      <div className="card">
+        <p style={{ color: 'var(--text-dim)', fontSize: '0.9em', marginBottom: 16 }}>
+          Set a PIN to prevent accidental access to the admin panel. Leave blank to disable.
+        </p>
+        <div className="row" style={{ marginBottom: 10 }}>
+          <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+            <label>New PIN</label>
+            <input
+              type="password"
+              inputMode="numeric"
+              value={newPin}
+              onChange={e => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
+              placeholder="4–8 digits"
+            />
+          </div>
+          <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+            <label>Confirm PIN</label>
+            <input
+              type="password"
+              inputMode="numeric"
+              value={confirmPin}
+              onChange={e => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
+              placeholder="Repeat PIN"
+            />
+          </div>
+        </div>
+        <div className="row">
+          <button className="btn btn-primary" onClick={savePin}>Set PIN</button>
+          <button className="btn btn-ghost" onClick={clearPin}>Remove PIN</button>
+          {pinMsg && (
+            <span style={{ fontSize: '0.85em', fontWeight: 600, color: pinMsg.ok ? 'var(--success)' : 'var(--danger)' }}>
+              {pinMsg.text}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="card" style={{ color: 'var(--text-dim)', fontSize: '0.9em' }}>
+        <strong style={{ color: 'var(--text)' }}>Monitor assignment</strong>
+        <p style={{ marginTop: 8 }}>
+          The launcher automatically opens on the largest connected display (external monitor)
+          and the admin panel opens on the smaller display (laptop screen). Reconnect monitors
+          and restart the app if placement is wrong.
+        </p>
+      </div>
+    </div>
+  )
+}

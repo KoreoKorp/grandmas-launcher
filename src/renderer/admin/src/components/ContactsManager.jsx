@@ -1,0 +1,132 @@
+import React, { useState } from 'react'
+
+const DEFAULT_MESSAGES = ['Hi, thinking of you!', 'Call me when you can 📞', 'I love you ❤️', 'Good morning!']
+
+function emptyContact() {
+  return {
+    id: Date.now().toString(),
+    name: '',
+    phone: '',
+    photo: '',
+    messages: [...DEFAULT_MESSAGES]
+  }
+}
+
+export default function ContactsManager({ contacts, onSave }) {
+  const [list, setList] = useState(contacts)
+  const [expanded, setExpanded] = useState(null)
+  const [saved, setSaved] = useState(false)
+
+  function update(id, field, value) {
+    setList(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c))
+  }
+
+  function updateMessage(contactId, index, value) {
+    setList(prev => prev.map(c => {
+      if (c.id !== contactId) return c
+      const msgs = [...c.messages]
+      msgs[index] = value
+      return { ...c, messages: msgs }
+    }))
+  }
+
+  function addMessage(contactId) {
+    setList(prev => prev.map(c =>
+      c.id === contactId ? { ...c, messages: [...c.messages, ''] } : c
+    ))
+  }
+
+  function removeMessage(contactId, index) {
+    setList(prev => prev.map(c => {
+      if (c.id !== contactId) return c
+      const msgs = c.messages.filter((_, i) => i !== index)
+      return { ...c, messages: msgs }
+    }))
+  }
+
+  async function save() {
+    await onSave(list)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  return (
+    <div>
+      <div className="row" style={{ marginBottom: 20 }}>
+        <h2 style={{ margin: 0 }}>Contacts & Messages</h2>
+        <button className="btn btn-ghost" onClick={() => setList(prev => [...prev, emptyContact()])}>+ Add Contact</button>
+        <button className="btn btn-primary" onClick={save}>Save All</button>
+        {saved && <span className="saved-notice">Saved!</span>}
+      </div>
+
+      {list.length === 0 && (
+        <div style={{ color: 'var(--text-dim)', marginBottom: 16 }}>No contacts yet. Add one above.</div>
+      )}
+
+      {list.map((c, index) => (
+        <div key={c.id} className="card">
+          <div className="row" style={{ marginBottom: 0 }}>
+            <div style={styles.avatar}>
+              {c.photo
+                ? <img src={c.photo} alt={c.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                : <span style={{ fontSize: 22, color: 'var(--accent)' }}>{c.name[0] || '?'}</span>
+              }
+            </div>
+            <div style={{ flex: 1 }}>
+              <input
+                value={c.name}
+                onChange={e => update(c.id, 'name', e.target.value)}
+                placeholder="Name"
+                style={{ marginBottom: 6 }}
+              />
+              <input
+                value={c.phone}
+                onChange={e => update(c.id, 'phone', e.target.value)}
+                placeholder="WhatsApp number (+1234567890)"
+              />
+            </div>
+            <button
+              className="btn btn-ghost"
+              onClick={() => setExpanded(expanded === c.id ? null : c.id)}
+            >
+              {expanded === c.id ? 'Hide messages ↑' : 'Edit messages ↓'}
+            </button>
+            <button className="btn btn-danger" onClick={() => setList(prev => prev.filter(x => x.id !== c.id))}>✕</button>
+          </div>
+
+          {expanded === c.id && (
+            <div style={{ marginTop: 16 }}>
+              <label>Pre-made messages</label>
+              {c.messages.map((msg, i) => (
+                <div key={i} className="row" style={{ marginBottom: 6 }}>
+                  <input
+                    value={msg}
+                    onChange={e => updateMessage(c.id, i, e.target.value)}
+                    placeholder="Message..."
+                  />
+                  <button className="btn btn-danger" style={{ padding: '6px 10px' }} onClick={() => removeMessage(c.id, i)}>✕</button>
+                </div>
+              ))}
+              <button className="btn btn-ghost" style={{ marginTop: 6 }} onClick={() => addMessage(c.id)}>+ Add message</button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const styles = {
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: '50%',
+    background: 'var(--bg)',
+    border: '1px solid var(--border)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    overflow: 'hidden'
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "name": "grandmas-launcher",
+  "version": "1.0.0",
+  "description": "Dementia-friendly launcher for Windows",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "package": "electron-vite build && electron-builder",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^32.2.3",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "vite": "^5.4.8"
+  },
+  "build": {
+    "appId": "com.family.grandmas-launcher",
+    "productName": "Grandma's Launcher",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "requestedExecutionLevel": "highestAvailable"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Grandma's Launcher",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
+    }
+  }
+}
