@@ -3,6 +3,13 @@ import React, { useState } from 'react'
 const TILE_TYPES = ['web', 'app', 'built-in']
 const BUILT_IN_TARGETS = ['photos', 'weather', 'messages']
 
+function isImagePath(icon) {
+  if (!icon) return false
+  return /\.(png|jpg|jpeg|gif|svg|ico|webp|bmp)$/i.test(icon) ||
+         /^(https?:\/\/|file:\/\/|data:image)/i.test(icon) ||
+         /^[A-Z]:\\/i.test(icon)
+}
+
 function emptyTile() {
   return { id: Date.now().toString(), type: 'web', icon: '🔗', label: '', target: '', kiosk: false }
 }
@@ -14,6 +21,11 @@ export default function TileManager({ tiles, onSave }) {
 
   function update(id, field, value) {
     setList(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t))
+  }
+
+  async function pickImageFor(id) {
+    const path = await window.admin.pickImage()
+    if (path) update(id, 'icon', path)
   }
 
   function addTile() {
@@ -62,12 +74,41 @@ export default function TileManager({ tiles, onSave }) {
       {list.map((tile, index) => (
         <div key={tile.id} className="card">
           <div className="row" style={{ marginBottom: 12 }}>
-            <input
-              value={tile.icon}
-              onChange={e => update(tile.id, 'icon', e.target.value)}
-              style={{ width: 60, textAlign: 'center', fontSize: '1.4em' }}
-              placeholder="🔗"
-            />
+            {/* Icon preview + input */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {isImagePath(tile.icon) ? (
+                <img
+                  src={tile.icon}
+                  alt=""
+                  style={{ width: 36, height: 36, objectFit: 'contain', borderRadius: 4, border: '1px solid var(--border)' }}
+                />
+              ) : (
+                <input
+                  value={tile.icon}
+                  onChange={e => update(tile.id, 'icon', e.target.value)}
+                  style={{ width: 50, textAlign: 'center', fontSize: '1.4em' }}
+                  placeholder="🔗"
+                />
+              )}
+              <button
+                className="btn btn-ghost"
+                style={{ padding: '4px 8px', fontSize: '0.8em', whiteSpace: 'nowrap' }}
+                onClick={() => pickImageFor(tile.id)}
+                title="Choose a custom image for this tile"
+              >
+                🖼️
+              </button>
+              {isImagePath(tile.icon) && (
+                <button
+                  className="btn btn-ghost"
+                  style={{ padding: '4px 8px', fontSize: '0.8em' }}
+                  onClick={() => update(tile.id, 'icon', '🔗')}
+                  title="Reset to emoji"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
             <input
               value={tile.label}
               onChange={e => update(tile.id, 'label', e.target.value)}

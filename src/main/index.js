@@ -1,7 +1,7 @@
 import { app, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { exec } from 'child_process'
-import { createWindows } from './windows.js'
+import { createWindows, expandLauncher } from './windows.js'
 import { registerIPC, setWindows } from './ipc.js'
 import { fetchWeather } from './weather.js'
 import { store } from './store.js'
@@ -51,9 +51,9 @@ app.on('window-all-closed', () => {
 })
 
 function setupTray() {
-  // Use a simple 16x16 blank icon if no icon file exists yet
-  const icon = nativeImage.createEmpty()
-  tray = new Tray(icon)
+  const iconPath = join(__dirname, '../../resources/tray.png')
+  const icon = nativeImage.createFromPath(iconPath)
+  tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon)
   tray.setToolTip("Grandma's Launcher")
 
   const menu = Menu.buildFromTemplate([
@@ -67,14 +67,8 @@ function setupTray() {
       }
     },
     {
-      label: 'Show Launcher',
-      click: () => {
-        if (launcher && !launcher.isDestroyed()) {
-          launcher.show()
-          if (app.isPackaged) launcher.setAlwaysOnTop(true, 'screen-saver')
-          launcher.focus()
-        }
-      }
+      label: 'Show Launcher (full screen)',
+      click: () => expandLauncher(launcher)
     },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() }

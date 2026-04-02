@@ -3,6 +3,7 @@ import TileManager from './components/TileManager'
 import MyDayEditor from './components/MyDayEditor'
 import ContactsManager from './components/ContactsManager'
 import WeatherSettings from './components/WeatherSettings'
+import MessengerSettings from './components/MessengerSettings'
 import DisplaySettings from './components/DisplaySettings'
 import ConfusionSettings from './components/ConfusionSettings'
 import ActivityLog from './components/ActivityLog'
@@ -12,6 +13,7 @@ const TABS = [
   { id: 'myday', label: '📅 My Day' },
   { id: 'contacts', label: '💬 Contacts' },
   { id: 'weather', label: '🌤️ Weather' },
+  { id: 'messenger', label: '📡 Messenger' },
   { id: 'display', label: '🖥️ Display' },
   { id: 'confusion', label: '🧭 Safety' },
   { id: 'log', label: '📋 Activity' }
@@ -179,6 +181,12 @@ export default function App() {
           <WeatherSettings
             weather={config.weather}
             onSave={w => save('weather', { ...config.weather, ...w })}
+          />
+        )}
+        {activeTab === 'messenger' && (
+          <MessengerSettings
+            messenger={config.messenger}
+            onSave={m => save('messenger', { ...config.messenger, ...m })}
           />
         )}
         {activeTab === 'display' && (

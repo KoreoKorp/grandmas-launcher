@@ -31,6 +31,7 @@ function createLauncherWindow(display) {
     height: isDev ? Math.min(height, 800) : height,
     fullscreen: !isDev,
     frame: isDev,
+    icon: join(__dirname, '../../resources/icon.png'),
     alwaysOnTop: !isDev,
     resizable: isDev,
     movable: isDev,
@@ -70,6 +71,7 @@ function createAdminWindow(display) {
     width: Math.min(1100, width - 40),
     height: Math.min(820, height - 40),
     title: "Grandma's Launcher — Admin",
+    icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/admin.js'),
       contextIsolation: true,
@@ -109,4 +111,41 @@ function registerLauncherShortcuts(win) {
     win.setAlwaysOnTop(false)
     globalShortcut.unregisterAll()
   })
+
+  // Secret shrink: Ctrl+Shift+W collapses the launcher to a small floating window
+  // so the caregiver can reach the desktop. Tray → "Show Launcher" restores it.
+  globalShortcut.register('Ctrl+Shift+W', () => {
+    shrinkLauncher(win)
+  })
+}
+
+export function shrinkLauncher(win) {
+  if (!win || win.isDestroyed()) return
+
+  // Tell the renderer to close any embedded browser and return to the home screen
+  // before we resize, otherwise the BrowserView dimensions would be wrong
+  win.webContents.send('launcher:go-home')
+
+  win.setFullScreen(false)
+  win.setAlwaysOnTop(false)
+  win.setSkipTaskbar(false)   // Show on taskbar so caregiver can find it
+  win.setResizable(true)
+  win.setMovable(true)
+  // Size to a compact corner window
+  win.setSize(480, 320)
+  win.setPosition(40, 40)
+  globalShortcut.unregisterAll()
+}
+
+export function expandLauncher(win) {
+  if (!win || win.isDestroyed()) return
+  if (app.isPackaged) {
+    win.setSkipTaskbar(true)   // Hide from taskbar again in kiosk mode
+    win.setFullScreen(true)
+    win.setAlwaysOnTop(true, 'screen-saver')
+    win.setResizable(false)
+    win.setMovable(false)
+  }
+  win.show()
+  win.focus()
 }

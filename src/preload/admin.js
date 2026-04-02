@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('admin', {
   clearActivityLog: () => ipcRenderer.invoke('admin:clear-activity-log'),
   refreshWeather: () => ipcRenderer.invoke('admin:refresh-weather'),
   showLauncher: () => ipcRenderer.send('admin:show-launcher'),
+  pickImage: () => ipcRenderer.invoke('admin:pick-image'),
 
   onHelpAlert: (cb) => ipcRenderer.on('admin:help-alert', () => cb()),
   onAlert: (cb) => ipcRenderer.on('admin:alert', (_, data) => cb(data))

@@ -1,5 +1,13 @@
 import React, { useState, useRef } from 'react'
 
+// Detect whether the icon value is a file path or URL (image) vs an emoji string
+function isImagePath(icon) {
+  if (!icon) return false
+  return /\.(png|jpg|jpeg|gif|svg|ico|webp|bmp)$/i.test(icon) ||
+         /^(https?:\/\/|file:\/\/|data:image)/i.test(icon) ||
+         /^[A-Z]:\\/i.test(icon)  // Windows absolute path like C:\...
+}
+
 export default function Tile({ tile, onClick }) {
   const [hovered, setHovered] = useState(false)
   const [pressed, setPressed] = useState(false)
@@ -14,6 +22,7 @@ export default function Tile({ tile, onClick }) {
   }
 
   const isActive = activating || pressed
+  const useImage = isImagePath(tile.icon)
 
   return (
     <button
@@ -33,7 +42,13 @@ export default function Tile({ tile, onClick }) {
       onMouseDown={() => setPressed(true)}
       onMouseUp={() => setPressed(false)}
     >
-      <span style={styles.icon}>{activating ? '⏳' : tile.icon}</span>
+      {activating ? (
+        <span style={styles.icon}>⏳</span>
+      ) : useImage ? (
+        <img src={tile.icon} alt={tile.label} style={styles.iconImage} draggable={false} />
+      ) : (
+        <span style={styles.icon}>{tile.icon}</span>
+      )}
       <span style={styles.label}>{tile.label}</span>
     </button>
   )
@@ -56,6 +71,13 @@ const styles = {
   icon: {
     fontSize: 'calc(2.6em * var(--font-scale, 1))',
     lineHeight: 1
+  },
+  iconImage: {
+    width: 64,
+    height: 64,
+    objectFit: 'contain',
+    borderRadius: 8,
+    pointerEvents: 'none'
   },
   label: {
     fontSize: 'calc(1.05em * var(--font-scale, 1))',

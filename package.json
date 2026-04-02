@@ -34,6 +34,7 @@
       "package.json"
     ],
     "win": {
+      "icon": "resources/icon.ico",
       "target": [{ "target": "nsis", "arch": ["x64"] }],
       "requestedExecutionLevel": "highestAvailable"
     },
@@ -45,7 +46,12 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Grandma's Launcher",
       "deleteAppDataOnUninstall": false,
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "installerIcon": "resources/icon.ico",
+      "uninstallerIcon": "resources/icon.ico",
+      "installerHeaderIcon": "resources/icon.ico",
+      "installerHeader": "resources/installerHeader.bmp",
+      "installerSidebar": "resources/installerSidebar.bmp"
     }
   }
 }

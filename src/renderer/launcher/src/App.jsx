@@ -109,15 +109,15 @@ export default function App() {
   function handleTileOpen(tile) {
     resetInactivity()
     if (tile.type === 'web') {
-      window.launcher.openUrl(tile.target, tile.kiosk)
+      // Use a persistent session so Jean stays logged in to Google, YouTube, etc.
+      window.launcher.openUrl(tile.target, tile.kiosk, 'persist:launcher')
       if (!tile.kiosk) setView('browser')
     } else if (tile.type === 'app') {
       window.launcher.launchApp(tile.target)
     } else if (tile.type === 'built-in') {
       if (tile.target === 'messages') {
         const messengerUrl = config.messenger?.url || 'http://34.132.145.35:3000/jean.html'
-        window.launcher.openUrl(messengerUrl, false)
-        // view will be set to 'browser' by the onBrowserOpened listener
+        window.launcher.openUrl(messengerUrl, false, 'persist:launcher')
       }
       if (tile.target === 'weather') setShowWeather(true)
     }

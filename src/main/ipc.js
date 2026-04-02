@@ -1,6 +1,7 @@
-import { ipcMain, shell, BrowserView } from 'electron'
+import { ipcMain, shell, BrowserView, dialog } from 'electron'
 import { store, logActivity } from './store.js'
 import { fetchWeather, clearWeatherCache } from './weather.js'
+import { expandLauncher } from './windows.js'
 
 let launcherWin = null
 let adminWin = null
@@ -27,6 +28,7 @@ export function registerIPC() {
     display: store.get('display'),
     confusion: store.get('confusion'),
     help: store.get('help'),
+    messenger: store.get('messenger'),
     userName: store.get('userName')
   }))
 
@@ -99,11 +101,27 @@ export function registerIPC() {
   })
 
   ipcMain.handle('launcher:launch-app', async (event, { path }) => {
-    const { spawn } = await import('child_process')
-    const child = spawn(path, [], { detached: true, stdio: 'ignore' })
-    child.unref()
-    logActivity('app-launched', path)
-    return { ok: true }
+    // Guard: if the target looks like a URL, open it as a website instead of spawning
+    if (/^https?:\/\//i.test(path) || /^[a-z0-9-]+\.(com|org|net|io|co)/i.test(path)) {
+      const url = path.startsWith('http') ? path : `https://${path}`
+      openEmbeddedBrowser(url)
+      logActivity('app-redirected-to-web', url)
+      return { ok: true }
+    }
+
+    try {
+      const { spawn } = await import('child_process')
+      const child = spawn(path, [], { detached: true, stdio: 'ignore' })
+      child.unref()
+      child.on('error', (err) => {
+        console.error('[launch-app] spawn error:', err.message)
+      })
+      logActivity('app-launched', path)
+      return { ok: true }
+    } catch (err) {
+      console.error('[launch-app] failed:', err.message)
+      return { ok: false, error: err.message }
+    }
   })
 
   ipcMain.on('launcher:log-activity', (event, { type, detail }) => {
@@ -142,11 +160,20 @@ export function registerIPC() {
     return result
   })
 
+  ipcMain.handle('admin:pick-image', async () => {
+    const result = await dialog.showOpenDialog(adminWin, {
+      title: 'Choose a tile icon image',
+      filters: [
+        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'webp'] }
+      ],
+      properties: ['openFile']
+    })
+    if (result.canceled || !result.filePaths.length) return null
+    return result.filePaths[0]
+  })
+
   ipcMain.on('admin:show-launcher', () => {
-    if (launcherWin && !launcherWin.isDestroyed()) {
-      launcherWin.show()
-      launcherWin.focus()
-    }
+    expandLauncher(launcherWin)
   })
 }
 

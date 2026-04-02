@@ -36,6 +36,9 @@ const defaults = {
     caregiverName: 'Family',
     contactMethod: 'notification'
   },
+  messenger: {
+    url: 'http://34.132.145.35:3000/jean.html'
+  },
   userName: 'Grandma',
   activityLog: []
 }
