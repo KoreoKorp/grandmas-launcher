@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('launcher', {
   sendHelpNotification: () => ipcRenderer.send('launcher:send-help-notification'),
   launchApp: (path) => ipcRenderer.invoke('launcher:launch-app', { path }),
   logActivity: (type, detail = '') => ipcRenderer.send('launcher:log-activity', { type, detail }),
+  getMusic: () => ipcRenderer.invoke('launcher:get-music'),
 
   onWeatherUpdated: (cb) => {
     const h = (_, data) => cb(data)
@@ -36,5 +37,42 @@ contextBridge.exposeInMainWorld('launcher', {
     const h = () => cb()
     ipcRenderer.on('launcher:go-home', h)
     return () => ipcRenderer.removeListener('launcher:go-home', h)
+  },
+  onInactivityTimeout: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on('launcher:inactivity-timeout', h)
+    return () => ipcRenderer.removeListener('launcher:inactivity-timeout', h)
+  },
+  onNetworkStatus: (cb) => {
+    const h = (_, data) => cb(data)
+    ipcRenderer.on('launcher:network-status', h)
+    return () => ipcRenderer.removeListener('launcher:network-status', h)
+  },
+  onBrowserLoaded: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on('launcher:browser-loaded', h)
+    return () => ipcRenderer.removeListener('launcher:browser-loaded', h)
+  },
+
+  // WebRTC signaling relay
+  sendAnswer: (to, answer) => ipcRenderer.send('launcher:call-answer', { to, answer }),
+  sendIceCandidate: (to, candidate) => ipcRenderer.send('launcher:ice-candidate', { to, candidate }),
+  endCall: (to) => ipcRenderer.send('launcher:end-call', { to }),
+  declineCall: (to) => ipcRenderer.send('launcher:decline-call', { to }),
+
+  onIncomingCall: (cb) => {
+    const h = (_, data) => cb(data)
+    ipcRenderer.on('launcher:incoming-call', h)
+    return () => ipcRenderer.removeListener('launcher:incoming-call', h)
+  },
+  onIceCandidate: (cb) => {
+    const h = (_, data) => cb(data)
+    ipcRenderer.on('launcher:ice-candidate', h)
+    return () => ipcRenderer.removeListener('launcher:ice-candidate', h)
+  },
+  onCallEnded: (cb) => {
+    const h = (_, data) => cb(data)
+    ipcRenderer.on('launcher:call-ended', h)
+    return () => ipcRenderer.removeListener('launcher:call-ended', h)
   }
 })

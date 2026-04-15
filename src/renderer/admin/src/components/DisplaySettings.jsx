@@ -3,6 +3,8 @@ import React, { useState } from 'react'
 export default function DisplaySettings({ display, onSave }) {
   const [fontScale, setFontScale] = useState(display.fontScale)
   const [saved, setSaved] = useState(false)
+  const [volumeLevel, setVolumeLevel] = useState(display.volumeLevel ?? 40)
+  const [volumeSaved, setVolumeSaved] = useState(false)
 
   const [newPin, setNewPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
@@ -12,6 +14,13 @@ export default function DisplaySettings({ display, onSave }) {
     await onSave({ fontScale })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  async function saveVolume() {
+    const safe = Math.min(100, Math.max(0, Number(volumeLevel)))
+    await onSave({ volumeLevel: safe })
+    setVolumeSaved(true)
+    setTimeout(() => setVolumeSaved(false), 2000)
   }
 
   async function savePin() {
@@ -45,6 +54,28 @@ export default function DisplaySettings({ display, onSave }) {
         <div className="row">
           <button className="btn btn-primary" onClick={saveFont}>Save</button>
           {saved && <span className="saved-notice">Saved!</span>}
+        </div>
+      </div>
+
+      <h2>Volume Lock</h2>
+      <div className="card">
+        <div className="field">
+          <label>Maximum volume (0–100)</label>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={volumeLevel}
+            onChange={e => setVolumeLevel(Number(e.target.value))}
+            style={{ width: 100 }}
+          />
+          <div style={{ fontSize: '0.82em', color: 'var(--text-dim)', marginTop: 4 }}>
+            System volume is checked every 30 seconds and nudged back to this level if changed.
+          </div>
+        </div>
+        <div className="row">
+          <button className="btn btn-primary" onClick={saveVolume}>Save</button>
+          {volumeSaved && <span className="saved-notice">Saved!</span>}
         </div>
       </div>
 

@@ -22,6 +22,7 @@ function relativeTime(ts) {
 export default function ActivityLog() {
   const [log, setLog] = useState([])
   const [filter, setFilter] = useState('')
+  const [handoff, setHandoff] = useState('')
 
   useEffect(() => {
     window.admin.getActivityLog().then(entries => setLog([...entries].reverse()))
@@ -31,6 +32,15 @@ export default function ActivityLog() {
     if (!confirm('Clear the activity log?')) return
     await window.admin.clearActivityLog()
     setLog([])
+  }
+
+  async function addHandoffLog() {
+    if (!handoff.trim()) return
+    await window.admin.logActivity('handoff-log', handoff.trim())
+    setHandoff('')
+    // Refresh
+    const entries = await window.admin.getActivityLog()
+    setLog([...entries].reverse())
   }
 
   const filtered = filter
@@ -51,6 +61,19 @@ export default function ActivityLog() {
           Refresh
         </button>
         <button className="btn btn-danger" onClick={clear}>Clear</button>
+      </div>
+
+      <div className="card" style={{ marginBottom: 20, padding: 16 }}>
+        <h4 style={{ margin: '0 0 10px 0', color: 'var(--accent)' }}>Caregiver Handoff Notes</h4>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <textarea
+            value={handoff}
+            onChange={e => setHandoff(e.target.value)}
+            placeholder="Add notes for the next caregiver (e.g., 'Jean took her meds at 2PM')"
+            style={{ flex: 1, minHeight: 60, padding: 8, borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}
+          />
+          <button className="btn btn-primary" onClick={addHandoffLog} style={{ alignSelf: 'flex-start' }}>Post</button>
+        </div>
       </div>
 
       {filtered.length === 0 && (

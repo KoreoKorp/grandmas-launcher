@@ -6,8 +6,10 @@ function emptyContact() {
   return {
     id: Date.now().toString(),
     name: '',
+    relation: '',
     phone: '',
     photo: '',
+    slug: '',
     messages: [...DEFAULT_MESSAGES]
   }
 }
@@ -80,6 +82,12 @@ export default function ContactsManager({ contacts, onSave }) {
                 style={{ marginBottom: 6 }}
               />
               <input
+                value={c.relation || ''}
+                onChange={e => update(c.id, 'relation', e.target.value)}
+                placeholder="Relation (e.g. Grandson)"
+                style={{ marginBottom: 6 }}
+              />
+              <input
                 value={c.phone}
                 onChange={e => update(c.id, 'phone', e.target.value)}
                 placeholder="WhatsApp number (+1234567890)"
@@ -96,6 +104,17 @@ export default function ContactsManager({ contacts, onSave }) {
 
           {expanded === c.id && (
             <div style={{ marginTop: 16 }}>
+              <div className="field" style={{ marginBottom: 12 }}>
+                <label>Messenger slug (e.g. <code>janetrhodes</code>)</label>
+                <input
+                  value={c.slug || ''}
+                  onChange={e => update(c.id, 'slug', e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                  placeholder="e.g. janetrhodes"
+                />
+                <div style={{ fontSize: '0.8em', color: 'var(--text-dim)', marginTop: 4 }}>
+                  Jean's messenger opens: <strong>jeankellmansmith.com/{c.slug || 'slug'}</strong>
+                </div>
+              </div>
               <label>Pre-made messages</label>
               {c.messages.map((msg, i) => (
                 <div key={i} className="row" style={{ marginBottom: 6 }}>

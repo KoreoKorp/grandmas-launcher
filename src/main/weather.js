@@ -29,17 +29,20 @@ export async function fetchWeather() {
     const { latitude, longitude, name } = geoData.results[0]
     const tempUnit = unit === 'F' ? 'fahrenheit' : 'celsius'
     const weatherRes = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weathercode,windspeed_10m&temperature_unit=${tempUnit}&windspeed_unit=mph`
+      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weathercode,windspeed_10m&temperature_unit=${tempUnit}&windspeed_unit=mph&daily=sunset&timezone=auto`
     )
     const weatherData = await weatherRes.json()
     const current = weatherData.current
+    const daily = weatherData.daily || {}
+    const sunsetISO = daily.sunset && daily.sunset.length > 0 ? daily.sunset[0] : null
 
     const result = {
       temp: Math.round(current.temperature_2m),
       unit,
       condition: wmoCodeToCondition(current.weathercode),
       icon: wmoCodeToIcon(current.weathercode),
-      locationName: name
+      locationName: name,
+      sunset: sunsetISO
     }
 
     store.set('weather.cached', result)

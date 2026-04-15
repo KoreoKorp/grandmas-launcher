@@ -11,8 +11,9 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          launcher: resolve(__dirname, 'src/preload/launcher.js'),
-          admin: resolve(__dirname, 'src/preload/admin.js')
+          launcher:    resolve(__dirname, 'src/preload/launcher.js'),
+          admin:       resolve(__dirname, 'src/preload/admin.js'),
+          browserView: resolve(__dirname, 'src/preload/browserView.js')
         }
       }
     }

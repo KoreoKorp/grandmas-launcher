@@ -1,11 +1,20 @@
-import { ipcMain, shell, BrowserView, dialog } from 'electron'
-import { store, logActivity } from './store.js'
+import { ipcMain, shell, BrowserView, dialog, app } from 'electron'
+import { join } from 'path'
+import { readdir } from 'fs/promises'
+import { store, logActivity, saveBackup, restoreBackup } from './store.js'
 import { fetchWeather, clearWeatherCache } from './weather.js'
 import { expandLauncher } from './windows.js'
 
 let launcherWin = null
 let adminWin = null
 let embeddedView = null // BrowserView for embedded websites
+
+let browserViewInactivityTimer = null
+let lastBrowserActivity = Date.now()
+
+let _emitSignal = null
+export function setSignalEmitter(fn) { _emitSignal = fn }
+function emitSignal(event, data) { if (_emitSignal) _emitSignal(event, data) }
 
 export function setWindows(launcher, admin) {
   launcherWin = launcher
@@ -17,6 +26,11 @@ export function setEmbeddedView(view) {
 }
 
 export function registerIPC() {
+  // ── BrowserView activity heartbeat ────────────────────────────────────────
+  ipcMain.on('browserView:activity', () => {
+    lastBrowserActivity = Date.now()
+  })
+
   // ── Launcher ──────────────────────────────────────────────────────────────
 
   ipcMain.handle('launcher:get-config', () => ({
@@ -128,11 +142,28 @@ export function registerIPC() {
     logActivity(type, detail)
   })
 
+  ipcMain.handle('launcher:get-music', async () => {
+    try {
+      const musicPath = app.getPath('music')
+      const files = await readdir(musicPath)
+      const mp3s = files.filter(f => f.toLowerCase().endsWith('.mp3'))
+      
+      return mp3s.map(file => ({
+        name: file.replace(/\.mp3$/i, ''),
+        path: `file://${join(musicPath, file).replace(/\\/g, '/')}`
+      }))
+    } catch (err) {
+      console.error('[music-player] Error reading music folder:', err)
+      return []
+    }
+  })
+
   // ── Admin ─────────────────────────────────────────────────────────────────
 
   ipcMain.handle('admin:get-config', () => store.store)
 
   ipcMain.handle('admin:set', (event, { key, value }) => {
+    saveBackup() // Save full config state before applying mutation
     store.set(key, value)
     // Bust weather cache when location/unit changes so next fetch is fresh
     if (key === 'weather') clearWeatherCache()
@@ -141,6 +172,15 @@ export function registerIPC() {
       launcherWin.webContents.send('launcher:config-updated', { key, value })
     }
     return { ok: true }
+  })
+
+  ipcMain.handle('admin:rollback-config', (event, { index }) => {
+    const success = restoreBackup(index)
+    if (success && launcherWin && !launcherWin.isDestroyed()) {
+      // Re-send updated config payload to force launcher to re-render changes
+      launcherWin.webContents.send('launcher:config-updated', { key: 'ALL', value: store.store })
+    }
+    return { ok: success }
   })
 
   ipcMain.handle('admin:get-activity-log', () => store.get('activityLog'))
@@ -175,13 +215,39 @@ export function registerIPC() {
   ipcMain.on('admin:show-launcher', () => {
     expandLauncher(launcherWin)
   })
+
+  // ── WebRTC signaling relay ────────────────────────────────────────────────
+
+  // Relay SDP answer from renderer → socket.io
+  ipcMain.on('launcher:call-answer', (_, { to, answer }) => {
+    emitSignal('call-answer', { to, answer })
+  })
+
+  // Relay ICE candidates renderer → socket.io
+  ipcMain.on('launcher:ice-candidate', (_, { to, candidate }) => {
+    emitSignal('ice-candidate', { to, candidate })
+  })
+
+  // Jean pressed End Call
+  ipcMain.on('launcher:end-call', (_, { to }) => {
+    emitSignal('call-ended', { to })
+  })
+
+  // Jean pressed "Not Now"
+  ipcMain.on('launcher:decline-call', (_, { to }) => {
+    emitSignal('call-declined', { to })
+  })
 }
 
 function openEmbeddedBrowser(url, partition = null) {
   if (!launcherWin) return
   closeEmbeddedBrowser()
 
-  const webPreferences = { contextIsolation: true, nodeIntegration: false }
+  const webPreferences = {
+    contextIsolation: true,
+    nodeIntegration: false,
+    preload: join(__dirname, '../preload/browserView.js')
+  }
   if (partition) webPreferences.partition = partition
 
   const view = new BrowserView({ webPreferences })
@@ -200,11 +266,23 @@ function openEmbeddedBrowser(url, partition = null) {
     return { action: 'deny' }
   })
 
+  // Signal renderer when the page finishes loading (clears loading skeleton)
+  view.webContents.once('did-finish-load', () => {
+    if (launcherWin && !launcherWin.isDestroyed()) {
+      launcherWin.webContents.send('launcher:browser-loaded')
+    }
+  })
+
   // Tell launcher renderer we entered browser mode
   launcherWin.webContents.send('launcher:browser-opened', { url })
+
+  // Start inactivity watch
+  lastBrowserActivity = Date.now()
+  startBrowserViewInactivityTimer()
 }
 
 function closeEmbeddedBrowser() {
+  stopBrowserViewInactivityTimer()
   if (!embeddedView || !launcherWin) return
   launcherWin.removeBrowserView(embeddedView)
   embeddedView.webContents.destroy()
@@ -213,5 +291,75 @@ function closeEmbeddedBrowser() {
 
   if (launcherWin && !launcherWin.isDestroyed()) {
     launcherWin.webContents.send('launcher:browser-closed')
+  }
+}
+
+export function forceGoHome() {
+  closeEmbeddedBrowser()   // synchronous — removeBrowserView is sync in Electron
+  if (launcherWin && !launcherWin.isDestroyed()) {
+    launcherWin.webContents.send('launcher:go-home')
+  }
+}
+
+export function closeEmbeddedBrowserSilent() {
+  // Close BrowserView without sending launcher:go-home IPC
+  // Used when incoming call arrives to clear BrowserView layer
+  stopBrowserViewInactivityTimer()
+  if (!embeddedView || !launcherWin) return
+  launcherWin.removeBrowserView(embeddedView)
+  embeddedView.webContents.destroy()
+  embeddedView = null
+  setEmbeddedView(null)
+  // Notify renderer the browser closed (so view state syncs)
+  if (launcherWin && !launcherWin.isDestroyed()) {
+    launcherWin.webContents.send('launcher:browser-closed')
+  }
+}
+
+export function setupLauncherPermissions(launcherWin) {
+  // Auto-grant camera/mic ONLY to the launcher BrowserWindow renderer
+  // Scoped by webContents.id to prevent BrowserViews from inheriting this grant
+  launcherWin.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (webContents.id === launcherWin.webContents.id &&
+        ['camera', 'microphone', 'media'].includes(permission)) {
+      callback(true)
+      return
+    }
+
+    // Auto-approve media permissions for the dedicated messenger web app
+    const messengerUrl = store.get('messenger.url')
+    if (messengerUrl && webContents.getURL().startsWith(messengerUrl) &&
+        ['camera', 'microphone', 'media'].includes(permission)) {
+      callback(true)
+      return
+    }
+
+    callback(false)
+  })
+}
+
+function startBrowserViewInactivityTimer() {
+  stopBrowserViewInactivityTimer()
+
+  browserViewInactivityTimer = setInterval(() => {
+    const { inactivityMinutes = 10, inactivityEnabled = true } = store.get('confusion') ?? {}
+    if (!inactivityEnabled) return
+
+    const elapsed = Date.now() - lastBrowserActivity
+    if (elapsed >= inactivityMinutes * 60 * 1000) {
+      logActivity('browserView-inactivity-timeout')
+      stopBrowserViewInactivityTimer()
+      closeEmbeddedBrowser()
+      if (launcherWin && !launcherWin.isDestroyed()) {
+        launcherWin.webContents.send('launcher:inactivity-timeout')
+      }
+    }
+  }, 30_000)
+}
+
+function stopBrowserViewInactivityTimer() {
+  if (browserViewInactivityTimer) {
+    clearInterval(browserViewInactivityTimer)
+    browserViewInactivityTimer = null
   }
 }

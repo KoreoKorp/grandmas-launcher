@@ -1,5 +1,7 @@
 import { BrowserWindow, screen, globalShortcut, app } from 'electron'
 import { join } from 'path'
+import { logActivity } from './store.js'
+import { forceGoHome } from './ipc.js'
 
 export function createWindows() {
   const displays = screen.getAllDisplays()
@@ -57,7 +59,13 @@ function createLauncherWindow(display) {
 
   // Intercept keyboard escapes within this window
   win.on('focus', () => registerLauncherShortcuts(win))
-  win.on('blur', () => globalShortcut.unregisterAll())
+  win.on('blur', () => {
+    globalShortcut.unregisterAll()
+    registerAlwaysOnShortcuts(win)
+  })
+
+  // Start with always-on shortcuts registered
+  registerAlwaysOnShortcuts(win)
 
   return win
 }
@@ -110,6 +118,7 @@ function registerLauncherShortcuts(win) {
   globalShortcut.register('Ctrl+Shift+Escape', () => {
     win.setAlwaysOnTop(false)
     globalShortcut.unregisterAll()
+    registerAlwaysOnShortcuts(win)
   })
 
   // Secret shrink: Ctrl+Shift+W collapses the launcher to a small floating window
@@ -135,6 +144,7 @@ export function shrinkLauncher(win) {
   win.setSize(480, 320)
   win.setPosition(40, 40)
   globalShortcut.unregisterAll()
+  registerAlwaysOnShortcuts(win)
 }
 
 export function expandLauncher(win) {
@@ -149,3 +159,16 @@ export function expandLauncher(win) {
   win.show()
   win.focus()
 }
+
+function registerAlwaysOnShortcuts(win) {
+  const f24Registered = globalShortcut.register('F24', () => {
+    if (win && !win.isAlwaysOnTop()) return
+    forceGoHome()
+    logActivity('f24-home-pressed')
+  })
+  if (!f24Registered) {
+    logActivity('f24-registration-failed')
+    console.warn('[F24] Could not register F24 shortcut — key may not exist on this keyboard')
+  }
+}
+

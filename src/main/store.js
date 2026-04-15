@@ -8,7 +8,8 @@ const defaults = {
     { id: 'photos',    type: 'web',      icon: '🖼️',  label: 'Photos',   target: 'https://photos.google.com',    kiosk: false },
     { id: 'games',     type: 'web',      icon: '🎮',  label: 'Games',    target: 'https://www.pogo.com',          kiosk: false },
     { id: 'weather',   type: 'built-in', icon: '🌤️', label: 'Weather',  target: 'weather' },
-    { id: 'messages',  type: 'built-in', icon: '💬',  label: 'Messages', target: 'messages' }
+    { id: 'messages',  type: 'built-in', icon: '💬',  label: 'Messages', target: 'messages' },
+    { id: 'music',     type: 'built-in', icon: '🎵',  label: 'Music',    target: 'music' }
   ],
   reminders: [],
   contacts: [],
@@ -23,7 +24,8 @@ const defaults = {
   display: {
     launcherDisplay: 0,
     adminDisplay: 1,
-    fontScale: 'medium'
+    fontScale: 'medium',
+    volumeLevel: 40        // 0–100; enforced by PowerShell every 30s
   },
   confusion: {
     inactivityMinutes: 10,
@@ -37,13 +39,68 @@ const defaults = {
     contactMethod: 'notification'
   },
   messenger: {
-    url: 'http://34.132.145.35:3000/jean.html'
+    url: 'https://jeankellmansmith.com',
+    webrtc: {
+      iceServers: [
+        { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+      ],
+      turnUrl: '',
+      turnUsername: '',
+      turnCredential: ''
+    }
   },
   userName: 'Grandma',
-  activityLog: []
+  activityLog: [],
+  remoteConfig: {
+    url: 'https://jeankellmansmith.com/config.json',
+    lastSyncedAt: null
+  },
+  configHistory: []
 }
 
 export const store = new Store({ defaults })
+
+export function saveBackup() {
+  const history = store.get('configHistory') || []
+  const currentState = store.store
+  
+  // Clone state, stripping out large dynamic logs/history arrays so we only back up true config
+  const stateToSave = { ...currentState }
+  delete stateToSave.configHistory
+  delete stateToSave.activityLog
+
+  history.unshift({ ts: Date.now(), state: stateToSave })
+  if (history.length > 5) history.length = 5 // Keep rolling last 5
+  store.set('configHistory', history)
+}
+
+export function restoreBackup(index) {
+  const history = store.get('configHistory') || []
+  if (history[index]) {
+    const state = history[index].state
+    for (const key in state) {
+      store.set(key, state[key])
+    }
+    logActivity('config-restored', `Restored backup index ${index}`)
+    return true
+  }
+  return false
+}
+
+// Stable device identity for socket.io registration
+if (!store.get('deviceId')) {
+  store.set('deviceId', crypto.randomUUID())
+}
+// Shared secret for call authentication (server must validate both)
+if (!store.get('authToken')) {
+  store.set('authToken', crypto.randomUUID())
+}
+
+// Migrate old hardcoded messenger IP to new domain for existing installs
+const OLD_MESSENGER_URL = 'http://34.132.145.35:3000/jean.html'
+if (store.get('messenger.url') === OLD_MESSENGER_URL) {
+  store.set('messenger.url', 'https://jeankellmansmith.com')
+}
 
 export function logActivity(type, detail = '') {
   const log = store.get('activityLog')

@@ -1,16 +1,33 @@
 import React, { useState } from 'react'
 
 export default function MessengerSettings({ messenger, onSave }) {
-  const [url, setUrl] = useState(messenger?.url || 'http://34.132.145.35:3000/jean.html')
+  const [url, setUrl] = useState(messenger?.url || '')
   const [saved, setSaved] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null) // null | { ok, msg }
 
+  const [turnUrl, setTurnUrl] = useState(messenger?.webrtc?.turnUrl ?? '')
+  const [turnUsername, setTurnUsername] = useState(messenger?.webrtc?.turnUsername ?? '')
+  const [turnCredential, setTurnCredential] = useState(messenger?.webrtc?.turnCredential ?? '')
+  const [turnSaved, setTurnSaved] = useState(false)
+
+  // Always send the complete messenger object to prevent stale-state races
+  // between the URL save and TURN save merging against an out-of-date config.messenger
+  function fullPayload() {
+    return { url: url.trim(), webrtc: { ...(messenger?.webrtc ?? {}), turnUrl, turnUsername, turnCredential } }
+  }
+
   async function save() {
-    await onSave({ url: url.trim() })
+    await onSave(fullPayload())
     setSaved(true)
     setTestResult(null)
     setTimeout(() => setSaved(false), 2500)
+  }
+
+  async function saveTurn() {
+    await onSave(fullPayload())
+    setTurnSaved(true)
+    setTimeout(() => setTurnSaved(false), 2000)
   }
 
   async function testConnection() {
@@ -80,6 +97,30 @@ export default function MessengerSettings({ messenger, onSave }) {
             {testResult.msg}
           </div>
         )}
+      </div>
+
+      <h2>Video Call (TURN Server)</h2>
+      <div className="card">
+        <p style={{ color: 'var(--text-dim)', fontSize: '0.9em', marginBottom: 12 }}>
+          Optional — improves call reliability on restricted networks (e.g. work VPNs).
+          Leave blank to use Google STUN only, which works on most home networks.
+        </p>
+        <div className="field">
+          <label>TURN URL</label>
+          <input value={turnUrl} onChange={e => setTurnUrl(e.target.value)} placeholder="turn:global.turn.twilio.com:3478" />
+        </div>
+        <div className="field">
+          <label>Username</label>
+          <input value={turnUsername} onChange={e => setTurnUsername(e.target.value)} placeholder="Twilio username" />
+        </div>
+        <div className="field">
+          <label>Credential</label>
+          <input type="password" value={turnCredential} onChange={e => setTurnCredential(e.target.value)} placeholder="Twilio credential" />
+        </div>
+        <div className="row">
+          <button className="btn btn-primary" onClick={saveTurn}>Save</button>
+          {turnSaved && <span className="saved-notice">Saved!</span>}
+        </div>
       </div>
 
       <div className="card">
