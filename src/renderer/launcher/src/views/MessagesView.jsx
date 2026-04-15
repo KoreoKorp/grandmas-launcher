@@ -13,7 +13,7 @@ export default function MessagesView({ contacts, messengerBase, onBack, onHelp }
     }
     base = base.replace(/\/+$/, '')
 
-    const url = safeSlug ? `${base}/chat/${safeSlug}` : base
+    const url = safeSlug ? `${base}/?room=${safeSlug}` : base
 
     window.launcher.openUrl(url, false, 'persist:launcher')
     window.launcher.logActivity('messenger-opened', contact.name)
