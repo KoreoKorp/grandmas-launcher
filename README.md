@@ -20,3 +20,36 @@ A custom-built, dementia-friendly kiosk application designed specifically for Wi
 *   **Storage:** `electron-store` for local configuration and activity logging
 *   **Networking:** `socket.io-client`, WebRTC, Fetch API
 *   **OS Integration:** Node.js `child_process` (PowerShell automation, custom C# volume controls, NSIS installer)
+## Quick Start
+
+### Prerequisites
+* **Node.js** (v18 or higher recommended)
+* **npm**
+* A Windows machine (to compile the `.exe` installer)
+
+### Installation & Compilation
+
+1. **Install dependencies:**
+   ```bash
+   cd grandmas-launcher
+   npm install
+   ```
+
+2. **Run in Development Mode:**
+   ```bash
+   npm run dev
+   ```
+   *This will launch the Electron app with hot-reloading enabled for UI changes.*
+
+3. **Build the Application:**
+   To compile the React front-end and main process code without packaging:
+   ```bash
+   npm run build
+   ```
+
+4. **Package for Windows (.exe installer):**
+   To create the final distributable setup executable for Grandma's machine:
+   ```bash
+   npm run package
+   ```
+   *The compiled installer will be output to the `dist/` folder.*
