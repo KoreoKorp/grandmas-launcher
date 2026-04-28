@@ -56,3 +56,44 @@ textarea, input { -webkit-user-select: text; user-select: text; }
   from { opacity: 0; transform: scale(0.97); }
   to   { opacity: 1; transform: scale(1); }
 }
+
+/* ── Day / Night theme blocks ─────────────────────────────────────────────── */
+
+/* Smooth, gradual transition so the color shift is never jarring for Jean */
+#root {
+  transition:
+    background-color 3s ease,
+    color 3s ease;
+}
+
+/* Day theme — explicit reset to the :root defaults */
+.theme-day {
+  --bg-main:        #3c3c54;
+  --bg-card:        #484860;
+  --bg-card-hover:  #525270;
+  --border:         #5e5e78;
+  --accent:         #f5b870;
+  --accent-hover:   #f7c888;
+  --text-primary:   #ffffff;
+  --text-secondary: #c8c8dc;
+  --help-bg:        linear-gradient(135deg, #5a7a9a, #4a6a88);
+  --help-border:    #6a8aaa;
+  --overlay-bg:     rgba(30, 30, 48, 0.96);
+}
+
+/* Night theme — warm candlelight tones to ease sundowning in the evening.
+   Deep amber-browns instead of cold/blue darks; soft off-white text;
+   accent stays in the amber family but is slightly richer. */
+.theme-night {
+  --bg-main:        #1E1206;
+  --bg-card:        #3D2415;
+  --bg-card-hover:  #4A2D1A;
+  --border:         #6B3E22;
+  --accent:         #F0A050;
+  --accent-hover:   #F5B870;
+  --text-primary:   #FFF8F0;
+  --text-secondary: #D4B896;
+  --help-bg:        linear-gradient(135deg, #5C3A1E, #3D2415);
+  --help-border:    #7A4A28;
+  --overlay-bg:     rgba(18, 8, 2, 0.96);
+}

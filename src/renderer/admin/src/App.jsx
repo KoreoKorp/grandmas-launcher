@@ -7,6 +7,7 @@ import MessengerSettings from './components/MessengerSettings'
 import DisplaySettings from './components/DisplaySettings'
 import ConfusionSettings from './components/ConfusionSettings'
 import ActivityLog from './components/ActivityLog'
+import ConfigRestore from './components/ConfigRestore'
 
 const TABS = [
   { id: 'tiles', label: '🔲 Tiles' },
@@ -16,7 +17,8 @@ const TABS = [
   { id: 'messenger', label: '📡 Messenger' },
   { id: 'display', label: '🖥️ Display' },
   { id: 'confusion', label: '🧭 Safety' },
-  { id: 'log', label: '📋 Activity' }
+  { id: 'log', label: '📋 Activity' },
+  { id: 'restore', label: '↩️ Restore' }
 ]
 
 function PinGate({ onUnlock }) {
@@ -202,6 +204,7 @@ export default function App() {
           />
         )}
         {activeTab === 'log' && <ActivityLog />}
+        {activeTab === 'restore' && <ConfigRestore />}
       </main>
       </div>
     </div>

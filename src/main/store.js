@@ -40,6 +40,7 @@ const defaults = {
   },
   messenger: {
     url: 'https://jeankellmansmith.com',
+    adminPassword: '',
     webrtc: {
       iceServers: [
         { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }

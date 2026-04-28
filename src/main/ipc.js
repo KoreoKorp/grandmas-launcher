@@ -183,6 +183,24 @@ export function registerIPC() {
     return { ok: success }
   })
 
+  ipcMain.handle('config:getHistory', () => {
+    const history = store.get('configHistory') || []
+    return history.map((entry, index) => ({ ts: entry.ts, index }))
+  })
+
+  ipcMain.handle('config:restore', (_, index) => {
+    const success = restoreBackup(index)
+    if (success) {
+      if (launcherWin && !launcherWin.isDestroyed()) {
+        launcherWin.webContents.send('launcher:config-updated', { key: 'ALL', value: store.store })
+      }
+      if (adminWin && !adminWin.isDestroyed()) {
+        adminWin.webContents.send('config:updated')
+      }
+    }
+    return { ok: success }
+  })
+
   ipcMain.handle('admin:get-activity-log', () => store.get('activityLog'))
 
   ipcMain.handle('admin:clear-activity-log', () => {

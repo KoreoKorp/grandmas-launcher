@@ -2,24 +2,31 @@ import React, { useState, useEffect } from 'react'
 
 /**
  * MessengerView
- * Embeds the in-house messenger web app (jean.html) directly in the launcher
- * as an iframe. Provides a back button and help button while keeping the
- * messenger experience contained within the launcher window.
+ * Embeds the in-house messenger web app directly in the launcher as an iframe.
+ * Provides a back button and help button while keeping the messenger experience
+ * contained within the launcher window.
+ *
+ * messengerUrl comes from the electron-store at messenger.url and defaults to
+ * https://jeankellmansmith.com in the main process. The server serves Jean's
+ * page at / (no /jean.html suffix needed).
  */
 export default function MessengerView({ onBack, onHelp, messengerUrl }) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const iframeRef = React.useRef(null)
 
-  const effectiveUrl = messengerUrl || 'http://34.132.145.35:3000/jean.html'
+  // Use the prop directly; fall back to the canonical domain — never hardcode IPs
+  const effectiveUrl = (messengerUrl || 'https://jeankellmansmith.com').replace(/\/+$/, '')
 
   // Test messenger connection on mount
   useEffect(() => {
     const checkConnection = async () => {
       try {
-        const response = await fetch(effectiveUrl.replace('/jean.html', '/api/health'), {
+        // Build health-check URL from the base origin so it works regardless of path/port
+        const healthUrl = new URL('/api/health', effectiveUrl).href
+        const response = await fetch(healthUrl, {
           method: 'GET',
-          timeout: 5000
+          signal: AbortSignal.timeout(5000)
         })
         if (!response.ok) {
           setError('Messenger service is offline')
