@@ -437,16 +437,19 @@ Power: ${isOnBattery ? 'Battery' : 'AC Plugged In'}`
 
       logActivity('boot-health-report-generated', reportMsg.replace(/\n/g, ' | '))
 
-      const { url } = store.get('messenger') || {}
+      const { url, adminPassword } = store.get('messenger') || {}
       if (!url) return
 
       // Attempt to hit the backend messenger API to route this text to the caregiver.
       // (Requires the proxy/messenger app to accept this generic payload)
-      // await fetch(`${url}/send-sys-report`, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ message: reportMsg })
-      // })
+      await fetch(`${url}/send-sys-report`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminPassword || ''
+        },
+        body: JSON.stringify({ message: reportMsg })
+      })
     } catch (err) {
       console.warn('[health-report] Failed to send boot report:', err)
     }
