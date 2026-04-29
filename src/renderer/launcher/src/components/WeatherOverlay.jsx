@@ -1,67 +1,137 @@
-import React from 'react'
+import React, { useState } from 'react'
 
-export default function WeatherOverlay({ weather, onClose }) {
-  if (!weather) return (
-    <div style={styles.backdrop}>
-      <div style={styles.card}>
-        <div style={styles.icon}>🌤️</div>
-        <div style={styles.condition}>Weather not set up yet</div>
-        <div style={styles.location}>Ask a family member to add your city in the Admin Panel → Weather tab.</div>
-        <button style={styles.closeBtn} onClick={onClose}>🏠 Back to Home</button>
+export default function WeatherOverlay({ weathers = [], onClose }) {
+  const [activeIdx, setActiveIdx] = useState(0)
+
+  if (!weathers.length) return (
+    <div style={S.backdrop}>
+      <div style={S.card}>
+        <div style={S.emptyIcon}>🌤️</div>
+        <div style={S.condition}>Weather not set up yet</div>
+        <div style={S.location}>
+          Ask a family member to add your city in the Admin Panel → Weather Settings.
+        </div>
+        <button style={S.closeBtn} onClick={onClose}>🏠 Back to Home</button>
       </div>
     </div>
   )
 
+  const w = weathers[activeIdx] ?? weathers[0]
+
   return (
-    <div style={styles.backdrop}>
-      <div style={styles.card}>
-        <div style={styles.icon}>{weather.icon}</div>
-        <div style={styles.temp}>{weather.temp}°{weather.unit}</div>
-        <div style={styles.condition}>{weather.condition}</div>
-        {weather.locationName && (
-          <div style={styles.location}>📍 {weather.locationName}</div>
-        )}
-        {weather.high != null && weather.low != null && (
-          <div style={styles.range}>
-            High {weather.high}° · Low {weather.low}°
+    <div style={S.backdrop}>
+      <div style={S.card}>
+        {/* Location tabs — only shown if there are multiple locations */}
+        {weathers.length > 1 && (
+          <div style={S.tabs}>
+            {weathers.map((loc, i) => (
+              <button
+                key={i}
+                style={{ ...S.tab, ...(i === activeIdx ? S.tabActive : {}) }}
+                onClick={() => setActiveIdx(i)}
+              >
+                {loc.locationName || `Location ${i + 1}`}
+              </button>
+            ))}
           </div>
         )}
-        <button style={styles.closeBtn} onClick={onClose}>🏠 Back to Home</button>
+
+        {/* Main weather display */}
+        <div style={S.icon}>{w.icon}</div>
+        <div style={S.temp}>{w.temp}°{w.unit}</div>
+        <div style={S.condition}>{w.condition}</div>
+
+        {w.locationName && (
+          <div style={S.location}>📍 {w.locationName}</div>
+        )}
+
+        {w.high != null && w.low != null && (
+          <div style={S.range}>
+            High {w.high}° · Low {w.low}°
+          </div>
+        )}
+
+        {/* Dot navigation for multiple locations */}
+        {weathers.length > 1 && (
+          <div style={S.dots}>
+            {weathers.map((_, i) => (
+              <button
+                key={i}
+                style={{ ...S.dot, ...(i === activeIdx ? S.dotActive : {}) }}
+                onClick={() => setActiveIdx(i)}
+                aria-label={`Location ${i + 1}`}
+              />
+            ))}
+          </div>
+        )}
+
+        <button style={S.closeBtn} onClick={onClose}>🏠 Back to Home</button>
       </div>
     </div>
   )
 }
 
-const styles = {
+const S = {
   backdrop: {
     position: 'fixed',
     inset: 0,
-    background: 'rgba(30, 30, 48, 0.88)',
+    background: 'rgba(20, 20, 36, 0.9)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 900
+    zIndex: 900,
+    animation: 'fadeIn 0.2s ease'
   },
   card: {
     background: 'var(--bg-card)',
     border: '1.5px solid var(--border)',
-    borderRadius: 'var(--radius)',
+    borderRadius: 24,
     padding: '48px 64px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 16,
+    gap: 14,
     minWidth: 340,
-    textAlign: 'center'
+    maxWidth: 480,
+    textAlign: 'center',
+    boxShadow: '0 24px 60px rgba(0,0,0,0.5)'
   },
+  tabs: {
+    display: 'flex',
+    gap: 8,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginBottom: 8
+  },
+  tab: {
+    padding: '6px 14px',
+    background: 'rgba(255,255,255,0.07)',
+    border: '1px solid var(--border)',
+    borderRadius: 20,
+    fontSize: 'calc(0.85em * var(--font-scale, 1))',
+    color: 'var(--text-secondary)',
+    cursor: 'pointer',
+    fontWeight: 500,
+    transition: 'background 0.12s, color 0.12s, border-color 0.12s'
+  },
+  tabActive: {
+    background: 'var(--accent-dim)',
+    borderColor: 'var(--accent)',
+    color: 'var(--accent)',
+    fontWeight: 700
+  },
+  emptyIcon: { fontSize: 80, lineHeight: 1 },
   icon: {
-    fontSize: 80,
-    lineHeight: 1
+    fontSize: 90,
+    lineHeight: 1,
+    filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))'
   },
   temp: {
-    fontSize: 'calc(3em * var(--font-scale, 1))',
-    fontWeight: 700,
-    color: 'var(--accent)'
+    fontSize: 'calc(3.5em * var(--font-scale, 1))',
+    fontWeight: 800,
+    color: 'var(--accent)',
+    lineHeight: 1,
+    letterSpacing: -1
   },
   condition: {
     fontSize: 'calc(1.3em * var(--font-scale, 1))',
@@ -70,22 +140,42 @@ const styles = {
     textTransform: 'capitalize'
   },
   location: {
-    fontSize: 'calc(1em * var(--font-scale, 1))',
+    fontSize: 'calc(0.95em * var(--font-scale, 1))',
     color: 'var(--text-secondary)'
   },
   range: {
-    fontSize: 'calc(1em * var(--font-scale, 1))',
+    fontSize: 'calc(0.95em * var(--font-scale, 1))',
     color: 'var(--text-secondary)'
   },
+  dots: {
+    display: 'flex',
+    gap: 10,
+    marginTop: 4
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: '50%',
+    background: 'var(--border)',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 0,
+    transition: 'background 0.14s, transform 0.12s'
+  },
+  dotActive: {
+    background: 'var(--accent)',
+    transform: 'scale(1.3)'
+  },
   closeBtn: {
-    marginTop: 16,
-    padding: '16px 40px',
+    marginTop: 10,
+    padding: '16px 44px',
     background: 'var(--accent)',
     color: '#2a2a3c',
     border: 'none',
     borderRadius: 'var(--radius)',
     fontSize: 'calc(1.1em * var(--font-scale, 1))',
-    fontWeight: 700,
-    cursor: 'pointer'
+    fontWeight: 800,
+    cursor: 'pointer',
+    boxShadow: '0 4px 16px rgba(245,184,112,0.3)'
   }
 }

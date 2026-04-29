@@ -103,6 +103,26 @@ if (store.get('messenger.url') === OLD_MESSENGER_URL) {
   store.set('messenger.url', 'https://jeankellmansmith.com')
 }
 
+// Remove ghost tiles — web tiles saved with an empty target URL that survived
+// earlier builds. electron-store persists across installs so these never
+// self-heal without an explicit migration.
+const tiles = store.get('tiles')
+const cleanedTiles = tiles.filter(t => !(t.type === 'web' && !t.target))
+if (cleanedTiles.length !== tiles.length) {
+  store.set('tiles', cleanedTiles)
+}
+
+// Migrate single-location weather config to multi-location array format.
+// Keep the old `location` string so any callers that haven't been updated yet
+// still work; the new `locations` array is the source of truth going forward.
+const weather = store.get('weather')
+if (!weather.locations) {
+  const locations = weather.location
+    ? [{ id: crypto.randomUUID(), name: weather.location }]
+    : []
+  store.set('weather.locations', locations)
+}
+
 export function logActivity(type, detail = '') {
   const log = store.get('activityLog')
   log.push({ type, detail, ts: Date.now() })

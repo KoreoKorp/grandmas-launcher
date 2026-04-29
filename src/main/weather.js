@@ -5,23 +5,23 @@ const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
 export function clearWeatherCache() {
   store.set('weather.cachedAt', null)
   store.set('weather.cached', null)
+  store.set('weather.locationCaches', {})
 }
 
-export async function fetchWeather() {
-  const { location, unit } = store.get('weather')
-  if (!location) return null
+// Fetch weather for a single named location string. Results are cached
+// per-location in weather.locationCaches keyed by the location name.
+export async function fetchWeatherForLocation(locationName, unit) {
+  if (!locationName) return null
 
-  const { cachedAt, cached } = store.get('weather')
-  if (cached && cachedAt && Date.now() - cachedAt < CACHE_TTL_MS) {
-    return cached
+  const caches = store.get('weather.locationCaches') || {}
+  const cached = caches[locationName]
+  if (cached?.data && cached?.at && Date.now() - cached.at < CACHE_TTL_MS) {
+    return cached.data
   }
 
   try {
-    const unitParam = unit === 'F' ? 'imperial' : 'metric'
-    // Uses Open-Meteo (no API key needed) with geocoding fallback
-    // First geocode the location
     const geoRes = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locationName)}&count=1`
     )
     const geoData = await geoRes.json()
     if (!geoData.results?.length) return null
@@ -34,7 +34,7 @@ export async function fetchWeather() {
     const weatherData = await weatherRes.json()
     const current = weatherData.current
     const daily = weatherData.daily || {}
-    const sunsetISO = daily.sunset && daily.sunset.length > 0 ? daily.sunset[0] : null
+    const sunsetISO = daily.sunset?.length > 0 ? daily.sunset[0] : null
 
     const result = {
       temp: Math.round(current.temperature_2m),
@@ -45,13 +45,32 @@ export async function fetchWeather() {
       sunset: sunsetISO
     }
 
-    store.set('weather.cached', result)
-    store.set('weather.cachedAt', Date.now())
+    caches[locationName] = { data: result, at: Date.now() }
+    store.set('weather.locationCaches', caches)
     return result
   } catch (e) {
     console.error('Weather fetch failed:', e)
-    return store.get('weather.cached') // return stale cache on error
+    return caches[locationName]?.data ?? null
   }
+}
+
+// Fetch weather for all configured locations. Returns an array of results in
+// the same order as the locations[] array in the store.
+export async function fetchWeather() {
+  const { locations = [], unit } = store.get('weather')
+
+  // Legacy fallback: if no locations array exists yet use old single location
+  if (!locations.length) {
+    const { location } = store.get('weather')
+    if (!location) return []
+    const result = await fetchWeatherForLocation(location, unit)
+    return result ? [result] : []
+  }
+
+  const results = await Promise.all(
+    locations.map(loc => fetchWeatherForLocation(loc.name, unit))
+  )
+  return results.filter(Boolean)
 }
 
 function wmoCodeToCondition(code) {

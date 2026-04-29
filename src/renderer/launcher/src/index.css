@@ -1,18 +1,26 @@
 :root {
-  --bg-main: #3c3c54;
-  --bg-card: #484860;
-  --bg-card-hover: #525270;
-  --border: #5e5e78;
+  --bg-main: #2e2e44;
+  --bg-card: #3d3d5a;
+  --bg-card-hover: #484868;
+  --bg-glass: rgba(72, 72, 104, 0.7);
+  --border: #565672;
+  --border-subtle: rgba(255,255,255,0.08);
   --accent: #f5b870;
   --accent-hover: #f7c888;
+  --accent-dim: rgba(245,184,112,0.15);
   --text-primary: #ffffff;
-  --text-secondary: #c8c8dc;
-  --help-bg: linear-gradient(135deg, #5a7a9a, #4a6a88);
-  --help-border: #6a8aaa;
+  --text-secondary: #bbbbd4;
+  --text-dim: #8888a8;
+  --help-bg: linear-gradient(135deg, #4a6a8a 0%, #3a5a7a 100%);
+  --help-border: #5a7a9a;
   --danger: #e05555;
-  --overlay-bg: rgba(30, 30, 48, 0.96);
-  --radius: 16px;
+  --overlay-bg: rgba(20, 20, 36, 0.96);
+  --radius: 18px;
   --radius-sm: 10px;
+  --radius-xs: 7px;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.25);
+  --shadow-md: 0 6px 20px rgba(0,0,0,0.35);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.45);
 
   --font-scale: 1;
 }
@@ -43,57 +51,61 @@ button {
   font: inherit;
 }
 
+textarea, input { -webkit-user-select: text; user-select: text; }
+
 /* Font scale variants */
 .font-small  { --font-scale: 0.9; }
 .font-medium { --font-scale: 1; }
 .font-large  { --font-scale: 1.15; }
 .font-xlarge { --font-scale: 1.35; }
 
-/* Allow text entry in inputs/textareas */
-textarea, input { -webkit-user-select: text; user-select: text; }
-
 @keyframes fadeIn {
   from { opacity: 0; transform: scale(0.97); }
   to   { opacity: 1; transform: scale(1); }
 }
 
-/* ── Day / Night theme blocks ─────────────────────────────────────────────── */
-
-/* Smooth, gradual transition so the color shift is never jarring for Jean */
-#root {
-  transition:
-    background-color 3s ease,
-    color 3s ease;
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Day theme — explicit reset to the :root defaults */
+/* ── Day / Night theme ──────────────────────────────────────────── */
+
+#root {
+  transition: background-color 3s ease, color 3s ease;
+}
+
 .theme-day {
-  --bg-main:        #3c3c54;
-  --bg-card:        #484860;
-  --bg-card-hover:  #525270;
-  --border:         #5e5e78;
+  --bg-main:        #2e2e44;
+  --bg-card:        #3d3d5a;
+  --bg-card-hover:  #484868;
+  --bg-glass:       rgba(72, 72, 104, 0.7);
+  --border:         #565672;
   --accent:         #f5b870;
   --accent-hover:   #f7c888;
+  --accent-dim:     rgba(245,184,112,0.15);
   --text-primary:   #ffffff;
-  --text-secondary: #c8c8dc;
-  --help-bg:        linear-gradient(135deg, #5a7a9a, #4a6a88);
-  --help-border:    #6a8aaa;
-  --overlay-bg:     rgba(30, 30, 48, 0.96);
+  --text-secondary: #bbbbd4;
+  --text-dim:       #8888a8;
+  --help-bg:        linear-gradient(135deg, #4a6a8a 0%, #3a5a7a 100%);
+  --help-border:    #5a7a9a;
+  --overlay-bg:     rgba(20, 20, 36, 0.96);
 }
 
-/* Night theme — warm candlelight tones to ease sundowning in the evening.
-   Deep amber-browns instead of cold/blue darks; soft off-white text;
-   accent stays in the amber family but is slightly richer. */
+/* Night — warm amber-brown palette, easy on aging eyes and reduces sundowning */
 .theme-night {
-  --bg-main:        #1E1206;
-  --bg-card:        #3D2415;
-  --bg-card-hover:  #4A2D1A;
-  --border:         #6B3E22;
-  --accent:         #F0A050;
-  --accent-hover:   #F5B870;
-  --text-primary:   #FFF8F0;
-  --text-secondary: #D4B896;
-  --help-bg:        linear-gradient(135deg, #5C3A1E, #3D2415);
-  --help-border:    #7A4A28;
-  --overlay-bg:     rgba(18, 8, 2, 0.96);
+  --bg-main:        #1a0f04;
+  --bg-card:        #321a0a;
+  --bg-card-hover:  #3e2210;
+  --bg-glass:       rgba(50, 26, 10, 0.7);
+  --border:         #5c3518;
+  --accent:         #f0a050;
+  --accent-hover:   #f5b870;
+  --accent-dim:     rgba(240,160,80,0.15);
+  --text-primary:   #fff5e8;
+  --text-secondary: #c8a882;
+  --text-dim:       #907060;
+  --help-bg:        linear-gradient(135deg, #5c3a1e 0%, #3c2210 100%);
+  --help-border:    #7a4a28;
+  --overlay-bg:     rgba(16, 8, 2, 0.97);
 }

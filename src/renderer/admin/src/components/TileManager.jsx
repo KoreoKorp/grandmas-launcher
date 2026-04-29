@@ -1,7 +1,18 @@
 import React, { useState } from 'react'
 
 const TILE_TYPES = ['web', 'app', 'built-in']
-const BUILT_IN_TARGETS = ['photos', 'weather', 'messages']
+const BUILT_IN_TARGETS = ['photos', 'weather', 'messages', 'music']
+
+const DEFAULT_TILES = [
+  { id: 'news',      type: 'web',      icon: '📰',  label: 'News',     target: 'https://apnews.com',            kiosk: false },
+  { id: 'pinterest', type: 'web',      icon: '📌',  label: 'Pinterest', target: 'https://pinterest.com',        kiosk: false },
+  { id: 'youtube',   type: 'web',      icon: '▶️',  label: 'YouTube',  target: 'https://www.youtube.com',       kiosk: false },
+  { id: 'photos',    type: 'web',      icon: '🖼️',  label: 'Photos',   target: 'https://photos.google.com',    kiosk: false },
+  { id: 'games',     type: 'web',      icon: '🎮',  label: 'Games',    target: 'https://www.pogo.com',          kiosk: false },
+  { id: 'weather',   type: 'built-in', icon: '🌤️', label: 'Weather',  target: 'weather' },
+  { id: 'messages',  type: 'built-in', icon: '💬',  label: 'Messages', target: 'messages' },
+  { id: 'music',     type: 'built-in', icon: '🎵',  label: 'Music',    target: 'music' }
+]
 
 function isImagePath(icon) {
   if (!icon) return false
@@ -18,6 +29,15 @@ export default function TileManager({ tiles, onSave }) {
   const [list, setList] = useState(tiles)
   const [editing, setEditing] = useState(null)
   const [saved, setSaved] = useState(false)
+  const [confirmReset, setConfirmReset] = useState(false)
+
+  async function resetToDefaults() {
+    setList(DEFAULT_TILES)
+    await onSave(DEFAULT_TILES)
+    setConfirmReset(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
 
   function update(id, field, value) {
     setList(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t))
@@ -68,6 +88,17 @@ export default function TileManager({ tiles, onSave }) {
         <h2 style={{ margin: 0 }}>Tile Manager</h2>
         <button className="btn btn-primary" onClick={addTile}>+ Add Tile</button>
         <button className="btn btn-primary" onClick={save}>Save</button>
+        {confirmReset ? (
+          <>
+            <span style={{ color: 'var(--text-dim)', fontSize: '0.9em' }}>Reset all tiles to defaults?</span>
+            <button className="btn btn-danger" onClick={resetToDefaults}>Yes, reset</button>
+            <button className="btn btn-ghost" onClick={() => setConfirmReset(false)}>Cancel</button>
+          </>
+        ) : (
+          <button className="btn btn-ghost" onClick={() => setConfirmReset(true)} title="Remove all custom tiles and restore the 8 original defaults">
+            ↺ Reset to Defaults
+          </button>
+        )}
         {saved && <span className="saved-notice">Saved!</span>}
       </div>
 

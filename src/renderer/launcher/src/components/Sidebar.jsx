@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react'
 
 function greeting(name) {
   const h = new Date().getHours()
-  const time = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+  const time = h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
   return `${time}, ${name}!`
 }
 
 function formatDate(d) {
   return d.toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+    weekday: 'long', month: 'long', day: 'numeric'
   })
 }
 
@@ -20,13 +20,11 @@ export default function Sidebar({ userName, dailyNote, reminders, weather, onHel
   const [now, setNow] = useState(new Date())
   const [activeReminder, setActiveReminder] = useState(null)
 
-  // Clock tick
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000)
     return () => clearInterval(id)
   }, [])
 
-  // Check reminders every minute
   useEffect(() => {
     function check() {
       const n = Date.now()
@@ -44,53 +42,54 @@ export default function Sidebar({ userName, dailyNote, reminders, weather, onHel
   }, [reminders])
 
   return (
-    <aside style={styles.sidebar}>
-      {/* Gradient background */}
-      <div style={styles.gradient} />
+    <aside style={S.sidebar}>
+      {/* Layered background for depth */}
+      <div style={S.bgLayer1} />
+      <div style={S.bgLayer2} />
 
-      <div style={styles.content}>
-        {/* Welcoming clipart */}
-        <div style={styles.clipart}>🌸</div>
+      <div style={S.content}>
+        {/* Clock — the most important piece of info */}
+        <div style={S.timeWrap}>
+          <div style={S.time}>{formatTime(now)}</div>
+          <div style={S.date}>{formatDate(now)}</div>
+        </div>
 
         {/* Greeting */}
-        <div style={styles.greeting}>{greeting(userName ?? 'Friend')}</div>
+        <div style={S.greeting}>{greeting(userName ?? 'Friend')}</div>
 
-        {/* Date */}
-        <div style={styles.date}>{formatDate(now)}</div>
-
-        {/* Time */}
-        <div style={styles.time}>{formatTime(now)}</div>
-
-        {/* Weather */}
+        {/* Weather card */}
         {weather && (
-          <div style={styles.weatherBox}>
-            <span style={styles.weatherIcon}>{weather.icon}</span>
-            <div>
-              <div style={styles.weatherTemp}>{weather.temp}°{weather.unit}</div>
-              <div style={styles.weatherCond}>{weather.condition}</div>
+          <div style={S.weatherCard}>
+            <span style={S.weatherIcon}>{weather.icon}</span>
+            <div style={S.weatherInfo}>
+              <div style={S.weatherTemp}>{weather.temp}°{weather.unit}</div>
+              <div style={S.weatherCond}>{weather.condition}</div>
+              {weather.locationName && (
+                <div style={S.weatherLoc}>📍 {weather.locationName}</div>
+              )}
             </div>
           </div>
         )}
 
-        <div style={styles.divider} />
+        <div style={S.divider} />
 
         {/* Daily Note */}
         {dailyNote ? (
-          <div style={styles.noteBox}>
-            <div style={styles.noteLabel}>Today's Note</div>
-            <div style={styles.noteText}>{dailyNote}</div>
+          <div style={S.noteCard}>
+            <div style={S.noteLabel}>📋 Today's Note</div>
+            <div style={S.noteText}>{dailyNote}</div>
           </div>
         ) : null}
 
         {/* Upcoming Reminders */}
         {reminders?.length > 0 && (
-          <div style={styles.reminderList}>
+          <div style={S.reminderList}>
             {reminders.slice(0, 3).map((r, i) => (
-              <div key={i} style={styles.reminderItem}>
-                <span style={{ fontSize: '1.1em' }}>🔔</span>
+              <div key={i} style={S.reminderItem}>
+                <span style={S.reminderBell}>🔔</span>
                 <div>
-                  <div style={styles.reminderText}>{r.message}</div>
-                  <div style={styles.reminderTime}>
+                  <div style={S.reminderText}>{r.message}</div>
+                  <div style={S.reminderTime}>
                     {new Date(r.time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                   </div>
                 </div>
@@ -101,31 +100,30 @@ export default function Sidebar({ userName, dailyNote, reminders, weather, onHel
 
         <div style={{ flex: 1 }} />
 
-        {/* Help Button */}
-        <button style={styles.helpBtn} onClick={onHelpPress}>
-          <span style={{ fontSize: '1.6em' }}>💙</span>
-          <span style={styles.helpText}>Tap here if you need help or feel lost</span>
+        {/* Help Button — large, obvious, friendly */}
+        <button style={S.helpBtn} onClick={onHelpPress}>
+          <span style={S.helpIcon}>💙</span>
+          <span style={S.helpText}>Need help?<br /><small style={S.helpSub}>Tap here if you feel lost</small></span>
         </button>
       </div>
 
-      {/* Reminder popup overlay */}
+      {/* Reminder popup */}
       {activeReminder && (
-        <div style={styles.reminderPopup}>
-          <div style={{ fontSize: '2em' }}>🔔</div>
-          <div style={styles.reminderPopupText}>{activeReminder.message}</div>
-          <button
-            style={styles.reminderDismiss}
-            onClick={() => setActiveReminder(null)}
-          >
-            Got it
-          </button>
+        <div style={S.reminderOverlay}>
+          <div style={S.reminderCard}>
+            <div style={{ fontSize: '2.5em', marginBottom: 12 }}>🔔</div>
+            <div style={S.reminderPopupText}>{activeReminder.message}</div>
+            <button style={S.dismissBtn} onClick={() => setActiveReminder(null)}>
+              Got it ✓
+            </button>
+          </div>
         </div>
       )}
     </aside>
   )
 }
 
-const styles = {
+const S = {
   sidebar: {
     position: 'relative',
     width: '35%',
@@ -134,87 +132,112 @@ const styles = {
     height: '100%',
     flexShrink: 0,
     overflow: 'hidden',
-    borderRight: '1px solid var(--border)'
+    borderRight: '1px solid var(--border-subtle)'
   },
-  gradient: {
+  bgLayer1: {
     position: 'absolute',
     inset: 0,
-    background: 'linear-gradient(180deg, var(--bg-card) 0%, var(--bg-main) 100%)',
+    background: 'linear-gradient(160deg, var(--bg-card) 0%, var(--bg-main) 70%)',
     zIndex: 0
+  },
+  bgLayer2: {
+    position: 'absolute',
+    inset: 0,
+    background: 'radial-gradient(ellipse at 50% 0%, rgba(245,184,112,0.06) 0%, transparent 70%)',
+    zIndex: 1
   },
   content: {
     position: 'relative',
-    zIndex: 1,
+    zIndex: 2,
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
-    padding: '32px 28px',
-    gap: 12,
-    alignItems: 'center',
-    textAlign: 'center'
+    padding: '28px 24px',
+    gap: 14,
+    alignItems: 'stretch'
   },
-  clipart: {
-    fontSize: 56,
-    lineHeight: 1,
-    marginBottom: 4,
-    filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.18))'
-  },
-  greeting: {
-    fontSize: 'calc(1.1em * var(--font-scale, 1))',
-    color: 'var(--accent)',
-    fontWeight: 600,
-    letterSpacing: 0.3
-  },
-  date: {
-    fontSize: 'calc(1.1em * var(--font-scale, 1))',
-    color: 'var(--text-primary)',
-    fontWeight: 700,
-    lineHeight: 1.3
+  timeWrap: {
+    textAlign: 'center',
+    padding: '16px 0 8px',
   },
   time: {
-    fontSize: 'calc(2.8em * var(--font-scale, 1))',
+    fontSize: 'calc(3.2em * var(--font-scale, 1))',
+    fontWeight: 800,
     color: 'var(--text-primary)',
-    fontWeight: 700,
     lineHeight: 1,
-    marginBottom: 4
+    letterSpacing: -1,
+    textShadow: '0 2px 12px rgba(0,0,0,0.3)'
   },
-  weatherBox: {
+  date: {
+    fontSize: 'calc(0.95em * var(--font-scale, 1))',
+    color: 'var(--text-secondary)',
+    marginTop: 6,
+    fontWeight: 500
+  },
+  greeting: {
+    fontSize: 'calc(1.05em * var(--font-scale, 1))',
+    color: 'var(--accent)',
+    fontWeight: 700,
+    letterSpacing: 0.2,
+    textAlign: 'center'
+  },
+  weatherCard: {
     display: 'flex',
     alignItems: 'center',
-    gap: 12,
-    background: 'rgba(255,255,255,0.07)',
+    gap: 14,
+    background: 'var(--accent-dim)',
+    border: '1px solid rgba(245,184,112,0.2)',
     borderRadius: 'var(--radius-sm)',
-    padding: '10px 14px',
-    marginTop: 4
+    padding: '12px 16px'
   },
-  weatherIcon: { fontSize: '2em' },
-  weatherTemp: { fontSize: 'calc(1.3em * var(--font-scale, 1))', fontWeight: 700 },
-  weatherCond: { fontSize: 'calc(0.85em * var(--font-scale, 1))', color: 'var(--text-secondary)' },
+  weatherIcon: {
+    fontSize: 'calc(2.2em * var(--font-scale, 1))',
+    lineHeight: 1,
+    flexShrink: 0
+  },
+  weatherInfo: { display: 'flex', flexDirection: 'column', gap: 2 },
+  weatherTemp: {
+    fontSize: 'calc(1.4em * var(--font-scale, 1))',
+    fontWeight: 800,
+    color: 'var(--text-primary)',
+    lineHeight: 1
+  },
+  weatherCond: {
+    fontSize: 'calc(0.85em * var(--font-scale, 1))',
+    color: 'var(--text-secondary)',
+    fontWeight: 500
+  },
+  weatherLoc: {
+    fontSize: 'calc(0.75em * var(--font-scale, 1))',
+    color: 'var(--text-dim)',
+    marginTop: 2
+  },
   divider: {
     height: 1,
-    background: 'var(--border)',
-    margin: '4px 0'
+    background: 'var(--border-subtle)',
+    margin: '2px 0'
   },
-  noteBox: {
-    background: 'rgba(245,184,112,0.12)',
-    border: '1px solid rgba(245,184,112,0.3)',
-    borderRadius: 'var(--radius-sm)',
+  noteCard: {
+    background: 'var(--accent-dim)',
+    border: '1px solid rgba(245,184,112,0.25)',
+    borderLeft: '3px solid var(--accent)',
+    borderRadius: 'var(--radius-xs)',
     padding: '12px 14px',
-    gap: 6,
     display: 'flex',
-    flexDirection: 'column'
+    flexDirection: 'column',
+    gap: 6
   },
   noteLabel: {
     fontSize: 'calc(0.75em * var(--font-scale, 1))',
     color: 'var(--accent)',
-    fontWeight: 600,
+    fontWeight: 700,
     textTransform: 'uppercase',
-    letterSpacing: 1
+    letterSpacing: 0.8
   },
   noteText: {
     fontSize: 'calc(0.95em * var(--font-scale, 1))',
     color: 'var(--text-primary)',
-    lineHeight: 1.5
+    lineHeight: 1.55
   },
   reminderList: {
     display: 'flex',
@@ -225,67 +248,86 @@ const styles = {
     display: 'flex',
     alignItems: 'flex-start',
     gap: 10,
-    background: 'rgba(255,255,255,0.05)',
-    borderRadius: 'var(--radius-sm)',
-    padding: '10px 12px'
+    background: 'rgba(255,255,255,0.04)',
+    borderRadius: 'var(--radius-xs)',
+    padding: '10px 12px',
+    border: '1px solid var(--border-subtle)'
   },
+  reminderBell: { fontSize: '1.1em', marginTop: 1, flexShrink: 0 },
   reminderText: {
     fontSize: 'calc(0.9em * var(--font-scale, 1))',
     color: 'var(--text-primary)',
-    lineHeight: 1.4
+    lineHeight: 1.4,
+    fontWeight: 500
   },
   reminderTime: {
     fontSize: 'calc(0.75em * var(--font-scale, 1))',
-    color: 'var(--text-secondary)',
-    marginTop: 2
+    color: 'var(--text-dim)',
+    marginTop: 3
   },
   helpBtn: {
     display: 'flex',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
     width: '100%',
-    padding: '18px 20px',
+    padding: '20px 18px',
     background: 'var(--help-bg)',
     border: '1.5px solid var(--help-border)',
     borderRadius: 'var(--radius)',
     cursor: 'pointer',
-    textAlign: 'left',
-    transition: 'filter 0.15s',
-    marginTop: 8
+    transition: 'filter 0.15s, transform 0.1s',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+    marginTop: 4
   },
+  helpIcon: { fontSize: 'calc(2em * var(--font-scale, 1))', flexShrink: 0 },
   helpText: {
-    fontSize: 'calc(1em * var(--font-scale, 1))',
+    fontSize: 'calc(1.05em * var(--font-scale, 1))',
     color: '#fff',
-    fontWeight: 600,
-    lineHeight: 1.4
+    fontWeight: 700,
+    lineHeight: 1.3,
+    textAlign: 'left'
   },
-  reminderPopup: {
+  helpSub: { fontSize: '0.8em', fontWeight: 400, opacity: 0.85 },
+  reminderOverlay: {
     position: 'absolute',
     inset: 0,
     background: 'var(--overlay-bg)',
     display: 'flex',
-    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
-    zIndex: 10,
-    padding: 32,
-    textAlign: 'center'
+    zIndex: 20,
+    padding: 24,
+    animation: 'fadeIn 0.2s ease'
+  },
+  reminderCard: {
+    background: 'var(--bg-card)',
+    border: '1.5px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    padding: '36px 32px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    textAlign: 'center',
+    gap: 8,
+    boxShadow: 'var(--shadow-lg)'
   },
   reminderPopupText: {
-    fontSize: 'calc(1.4em * var(--font-scale, 1))',
-    fontWeight: 600,
+    fontSize: 'calc(1.3em * var(--font-scale, 1))',
+    fontWeight: 700,
     color: 'var(--text-primary)',
-    lineHeight: 1.5
+    lineHeight: 1.5,
+    marginBottom: 8
   },
-  reminderDismiss: {
-    padding: '14px 40px',
+  dismissBtn: {
+    marginTop: 8,
+    padding: '14px 36px',
     background: 'var(--accent)',
     color: '#2a2a3c',
     borderRadius: 'var(--radius)',
     fontSize: 'calc(1.1em * var(--font-scale, 1))',
-    fontWeight: 700,
+    fontWeight: 800,
     cursor: 'pointer',
-    border: 'none'
+    border: 'none',
+    boxShadow: '0 4px 12px rgba(245,184,112,0.3)'
   }
 }

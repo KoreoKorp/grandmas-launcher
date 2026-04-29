@@ -12,7 +12,7 @@ import DailyCheckin from './components/DailyCheckin'
 
 export default function App() {
   const [config, setConfig] = useState(null)
-  const [weather, setWeather] = useState(null)
+  const [weatherList, setWeatherList] = useState([])
   const [view, setView] = useState('home') // 'home' | 'browser' | 'messages' | 'messenger'
   const [browserUrl, setBrowserUrl] = useState('')
   const [showHelp, setShowHelp] = useState(false)
@@ -35,13 +35,13 @@ export default function App() {
   // Load config on mount
   useEffect(() => {
     window.launcher.getConfig().then(setConfig)
-    window.launcher.getWeather().then(setWeather)
+    window.launcher.getWeather().then(r => setWeatherList(Array.isArray(r) ? r : r ? [r] : []))
   }, [])
 
   // Re-fetch weather every 30 min
   useEffect(() => {
     const id = setInterval(() => {
-      window.launcher.getWeather().then(setWeather)
+      window.launcher.getWeather().then(r => setWeatherList(Array.isArray(r) ? r : r ? [r] : []))
     }, 30 * 60 * 1000)
     return () => clearInterval(id)
   }, [])
@@ -56,7 +56,7 @@ export default function App() {
 
   // Listen for weather pushed from main (after admin force-refresh)
   useEffect(() => {
-    const cleanup = window.launcher.onWeatherUpdated(setWeather)
+    const cleanup = window.launcher.onWeatherUpdated(r => setWeatherList(Array.isArray(r) ? r : r ? [r] : []))
     return cleanup
   }, [])
 
@@ -338,6 +338,9 @@ export default function App() {
     setShowHelp(true)
   }
 
+  // Single-item shorthand used by most components (first location in list)
+  const weather = weatherList[0] ?? null
+
   // Night mode derived from weather sunset
   const [isNight, setIsNight] = useState(false)
   useEffect(() => {
@@ -440,7 +443,7 @@ export default function App() {
 
       {showWeather && (
         <WeatherOverlay
-          weather={weather}
+          weathers={weatherList}
           onClose={() => setShowWeather(false)}
         />
       )}
