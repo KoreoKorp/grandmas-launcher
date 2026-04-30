@@ -39,7 +39,7 @@ const defaults = {
     contactMethod: 'notification'
   },
   messenger: {
-    url: 'https://jeankellmansmith.com',
+    url: 'https://chat.jeankellmansmith.com',
     adminPassword: '',
     webrtc: {
       iceServers: [
@@ -61,7 +61,7 @@ const defaults = {
   userName: 'Grandma',
   activityLog: [],
   remoteConfig: {
-    url: 'https://jeankellmansmith.com/config.json',
+    url: 'https://chat.jeankellmansmith.com/config.json',
     lastSyncedAt: null
   },
   configHistory: []
@@ -107,8 +107,9 @@ if (!store.get('authToken')) {
 
 // Migrate old hardcoded messenger IP to new domain for existing installs
 const OLD_MESSENGER_URL = 'http://34.132.145.35:3000/jean.html'
-if (store.get('messenger.url') === OLD_MESSENGER_URL) {
-  store.set('messenger.url', 'https://jeankellmansmith.com')
+if (store.get('messenger.url') === OLD_MESSENGER_URL ||
+    store.get('messenger.url') === 'https://jeankellmansmith.com') {
+  store.set('messenger.url', 'https://chat.jeankellmansmith.com')
 }
 
 // Remove ghost tiles — web tiles saved with an empty target URL that survived
