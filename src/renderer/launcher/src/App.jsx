@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import HomeView from './views/HomeView'
 import MessagesView from './views/MessagesView'
+import MessengerView from './views/MessengerView'
+import GamesView from './views/GamesView'
+import PhotosView from './views/PhotosView'
 import HelpOverlay from './components/HelpOverlay'
 import ConfusionOverlay from './components/ConfusionOverlay'
 import WeatherOverlay from './components/WeatherOverlay'
@@ -316,11 +319,19 @@ export default function App() {
       window.launcher.launchApp(tile.target)
     } else if (tile.type === 'built-in') {
       if (tile.target === 'messages') {
-        setView('messages')   // show contact picker — contact tap calls openUrl
+        setView('messenger')
         return
       }
       if (tile.target === 'music') {
         setView('music')
+        return
+      }
+      if (tile.target === 'games') {
+        setView('games')
+        return
+      }
+      if (tile.target === 'photos') {
+        setView('photos')
         return
       }
       if (tile.target === 'weather') setShowWeather(true)
@@ -385,10 +396,9 @@ export default function App() {
         />
       )}
 
-      {view === 'messages' && (
-        <MessagesView
-          contacts={config.contacts}
-          messengerBase={config.messenger?.url || 'https://jeankellmansmith.com'}
+      {view === 'messenger' && (
+        <MessengerView
+          messengerUrl={config.messenger?.url || 'http://localhost:3000'}
           onBack={goHome}
           onHelp={handleHelpPress}
         />
@@ -396,6 +406,22 @@ export default function App() {
 
       {view === 'music' && (
         <AudioPlayer
+          onBack={goHome}
+          onHelp={handleHelpPress}
+        />
+      )}
+
+      {view === 'games' && (
+        <GamesView
+          gamesConfig={config.games}
+          onBack={goHome}
+          onHelp={handleHelpPress}
+        />
+      )}
+
+      {view === 'photos' && (
+        <PhotosView
+          photosConfig={config.photos}
           onBack={goHome}
           onHelp={handleHelpPress}
         />

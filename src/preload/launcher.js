@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('launcher', {
   launchApp: (path) => ipcRenderer.invoke('launcher:launch-app', { path }),
   logActivity: (type, detail = '') => ipcRenderer.send('launcher:log-activity', { type, detail }),
   getMusic: () => ipcRenderer.invoke('launcher:get-music'),
+  getLocalGames: () => ipcRenderer.invoke('launcher:get-local-games'),
+  getLocalPhotos: () => ipcRenderer.invoke('launcher:get-local-photos'),
 
   onWeatherUpdated: (cb) => {
     const h = (_, data) => cb(data)

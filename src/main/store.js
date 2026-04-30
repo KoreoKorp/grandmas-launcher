@@ -5,8 +5,8 @@ const defaults = {
     { id: 'news',      type: 'web',      icon: '📰',  label: 'News',     target: 'https://apnews.com',            kiosk: false },
     { id: 'pinterest', type: 'web',      icon: '📌',  label: 'Pinterest', target: 'https://pinterest.com',        kiosk: false },
     { id: 'youtube',   type: 'web',      icon: '▶️',  label: 'YouTube',  target: 'https://www.youtube.com',       kiosk: false },
-    { id: 'photos',    type: 'web',      icon: '🖼️',  label: 'Photos',   target: 'https://photos.google.com',    kiosk: false },
-    { id: 'games',     type: 'web',      icon: '🎮',  label: 'Games',    target: 'https://www.pogo.com',          kiosk: false },
+    { id: 'photos',    type: 'built-in', icon: '🖼️',  label: 'Photos',   target: 'photos' },
+    { id: 'games',     type: 'built-in', icon: '🎮',  label: 'Games',    target: 'games' },
     { id: 'weather',   type: 'built-in', icon: '🌤️', label: 'Weather',  target: 'weather' },
     { id: 'messages',  type: 'built-in', icon: '💬',  label: 'Messages', target: 'messages' },
     { id: 'music',     type: 'built-in', icon: '🎵',  label: 'Music',    target: 'music' }
@@ -49,6 +49,14 @@ const defaults = {
       turnUsername: '',
       turnCredential: ''
     }
+  },
+  games: {
+    localGames: [],
+    onlineUrl: 'https://www.pogo.com'
+  },
+  photos: {
+    albumUrl: '',
+    localPath: ''
   },
   userName: 'Grandma',
   activityLog: [],
@@ -110,6 +118,22 @@ const tiles = store.get('tiles')
 const cleanedTiles = tiles.filter(t => !(t.type === 'web' && !t.target))
 if (cleanedTiles.length !== tiles.length) {
   store.set('tiles', cleanedTiles)
+}
+
+// Migrate photos and games tiles from web → built-in type on existing installs
+{
+  const migratedTiles = (store.get('tiles') ?? []).map(t => {
+    if (t.id === 'photos' && t.type === 'web' && typeof t.target === 'string' && t.target.includes('photos.google.com')) {
+      return { ...t, type: 'built-in', target: 'photos', kiosk: undefined }
+    }
+    if (t.id === 'games' && t.type === 'web') {
+      const onlineUrl = t.target
+      if (onlineUrl && !store.get('games.onlineUrl')) store.set('games.onlineUrl', onlineUrl)
+      return { ...t, type: 'built-in', target: 'games', kiosk: undefined }
+    }
+    return t
+  })
+  store.set('tiles', migratedTiles)
 }
 
 // Migrate single-location weather config to multi-location array format.

@@ -42,20 +42,19 @@ export default function Sidebar({ userName, dailyNote, reminders, weather, onHel
   }, [reminders])
 
   return (
-    <aside style={S.sidebar}>
+    <aside style={S.sidebar} className="sidebar-panel">
       {/* Layered background for depth */}
-      <div style={S.bgLayer1} />
       <div style={S.bgLayer2} />
 
       <div style={S.content}>
         {/* Clock — the most important piece of info */}
-        <div style={S.timeWrap}>
+        <div style={S.timeWrap} className="view-slide-up">
           <div style={S.time}>{formatTime(now)}</div>
           <div style={S.date}>{formatDate(now)}</div>
         </div>
 
         {/* Greeting */}
-        <div style={S.greeting}>{greeting(userName ?? 'Friend')}</div>
+        <div style={S.greeting} className="shimmer-text">{greeting(userName ?? 'Friend')}</div>
 
         {/* Weather card */}
         {weather && (
@@ -131,14 +130,7 @@ const S = {
     maxWidth: 440,
     height: '100%',
     flexShrink: 0,
-    overflow: 'hidden',
-    borderRight: '1px solid var(--border-subtle)'
-  },
-  bgLayer1: {
-    position: 'absolute',
-    inset: 0,
-    background: 'linear-gradient(160deg, var(--bg-card) 0%, var(--bg-main) 70%)',
-    zIndex: 0
+    overflow: 'hidden'
   },
   bgLayer2: {
     position: 'absolute',
@@ -185,10 +177,13 @@ const S = {
     display: 'flex',
     alignItems: 'center',
     gap: 14,
-    background: 'var(--accent-dim)',
-    border: '1px solid rgba(245,184,112,0.2)',
+    background: 'linear-gradient(135deg, var(--accent-dim) 0%, rgba(255,255,255,0.03) 100%)',
+    border: '1px solid rgba(245,184,112,0.25)',
     borderRadius: 'var(--radius-sm)',
-    padding: '12px 16px'
+    padding: '12px 16px',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)'
   },
   weatherIcon: {
     fontSize: 'calc(2.2em * var(--font-scale, 1))',
@@ -275,9 +270,10 @@ const S = {
     border: '1.5px solid var(--help-border)',
     borderRadius: 'var(--radius)',
     cursor: 'pointer',
-    transition: 'filter 0.15s, transform 0.1s',
-    boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-    marginTop: 4
+    transition: 'filter var(--transition-smooth), transform var(--transition-bounce), box-shadow var(--transition-smooth)',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15)',
+    marginTop: 4,
+    animation: 'pulse-glow 3s ease-in-out infinite'
   },
   helpIcon: { fontSize: 'calc(2em * var(--font-scale, 1))', flexShrink: 0 },
   helpText: {

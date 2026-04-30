@@ -43,6 +43,8 @@ export function registerIPC() {
     confusion: store.get('confusion'),
     help: store.get('help'),
     messenger: store.get('messenger'),
+    games: store.get('games'),
+    photos: store.get('photos'),
     userName: store.get('userName')
   }))
 
@@ -147,13 +149,33 @@ export function registerIPC() {
       const musicPath = app.getPath('music')
       const files = await readdir(musicPath)
       const mp3s = files.filter(f => f.toLowerCase().endsWith('.mp3'))
-      
+
       return mp3s.map(file => ({
         name: file.replace(/\.mp3$/i, ''),
         path: `file://${join(musicPath, file).replace(/\\/g, '/')}`
       }))
     } catch (err) {
       console.error('[music-player] Error reading music folder:', err)
+      return []
+    }
+  })
+
+  ipcMain.handle('launcher:get-local-games', () => {
+    return store.get('games.localGames') ?? []
+  })
+
+  ipcMain.handle('launcher:get-local-photos', async () => {
+    const localPath = store.get('photos.localPath') ?? ''
+    if (!localPath) return []
+    try {
+      const files = await readdir(localPath)
+      const images = files.filter(f => /\.(png|jpg|jpeg|gif|webp|bmp)$/i.test(f))
+      return images.map(file => ({
+        name: file,
+        url: `file://${join(localPath, file).replace(/\\/g, '/')}`
+      }))
+    } catch (err) {
+      console.error('[photos] Error reading local photos folder:', err)
       return []
     }
   })
@@ -223,6 +245,28 @@ export function registerIPC() {
       title: 'Choose a tile icon image',
       filters: [
         { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'webp'] }
+      ],
+      properties: ['openFile']
+    })
+    if (result.canceled || !result.filePaths.length) return null
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle('admin:pick-folder', async () => {
+    const result = await dialog.showOpenDialog(adminWin, {
+      title: 'Choose a folder',
+      properties: ['openDirectory']
+    })
+    if (result.canceled || !result.filePaths.length) return null
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle('admin:pick-app', async () => {
+    const result = await dialog.showOpenDialog(adminWin, {
+      title: 'Choose an application or executable',
+      filters: [
+        { name: 'Applications', extensions: ['exe', 'app', 'sh', 'bat', 'lnk'] },
+        { name: 'All Files', extensions: ['*'] }
       ],
       properties: ['openFile']
     })

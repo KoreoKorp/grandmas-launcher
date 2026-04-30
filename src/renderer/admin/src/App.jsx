@@ -8,12 +8,16 @@ import DisplaySettings from './components/DisplaySettings'
 import ConfusionSettings from './components/ConfusionSettings'
 import ActivityLog from './components/ActivityLog'
 import ConfigRestore from './components/ConfigRestore'
+import GamesSettings from './components/GamesSettings'
+import PhotosSettings from './components/PhotosSettings'
 
 const TABS = [
   { id: 'tiles', label: '🔲 Tiles' },
   { id: 'myday', label: '📅 My Day' },
   { id: 'contacts', label: '💬 Contacts' },
   { id: 'weather', label: '🌤️ Weather' },
+  { id: 'games', label: '🎮 Games' },
+  { id: 'photos', label: '📸 Photos' },
   { id: 'messenger', label: '📡 Messenger' },
   { id: 'display', label: '🖥️ Display' },
   { id: 'confusion', label: '🧭 Safety' },
@@ -201,6 +205,18 @@ export default function App() {
           <ConfusionSettings
             confusion={config.confusion}
             onSave={c => save('confusion', { ...config.confusion, ...c })}
+          />
+        )}
+        {activeTab === 'games' && (
+          <GamesSettings
+            games={config.games}
+            onSave={g => save('games', { ...config.games, ...g })}
+          />
+        )}
+        {activeTab === 'photos' && (
+          <PhotosSettings
+            photos={config.photos}
+            onSave={p => save('photos', { ...config.photos, ...p })}
           />
         )}
         {activeTab === 'log' && <ActivityLog />}

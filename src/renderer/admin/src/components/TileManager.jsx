@@ -1,14 +1,14 @@
 import React, { useState } from 'react'
 
 const TILE_TYPES = ['web', 'app', 'built-in']
-const BUILT_IN_TARGETS = ['photos', 'weather', 'messages', 'music']
+const BUILT_IN_TARGETS = ['photos', 'weather', 'messages', 'music', 'games']
 
 const DEFAULT_TILES = [
   { id: 'news',      type: 'web',      icon: '📰',  label: 'News',     target: 'https://apnews.com',            kiosk: false },
   { id: 'pinterest', type: 'web',      icon: '📌',  label: 'Pinterest', target: 'https://pinterest.com',        kiosk: false },
   { id: 'youtube',   type: 'web',      icon: '▶️',  label: 'YouTube',  target: 'https://www.youtube.com',       kiosk: false },
-  { id: 'photos',    type: 'web',      icon: '🖼️',  label: 'Photos',   target: 'https://photos.google.com',    kiosk: false },
-  { id: 'games',     type: 'web',      icon: '🎮',  label: 'Games',    target: 'https://www.pogo.com',          kiosk: false },
+  { id: 'photos',    type: 'built-in', icon: '🖼️',  label: 'Photos',   target: 'photos' },
+  { id: 'games',     type: 'built-in', icon: '🎮',  label: 'Games',    target: 'games' },
   { id: 'weather',   type: 'built-in', icon: '🌤️', label: 'Weather',  target: 'weather' },
   { id: 'messages',  type: 'built-in', icon: '💬',  label: 'Messages', target: 'messages' },
   { id: 'music',     type: 'built-in', icon: '🎵',  label: 'Music',    target: 'music' }

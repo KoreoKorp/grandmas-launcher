@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('admin', {
   refreshWeather: () => ipcRenderer.invoke('admin:refresh-weather'),
   showLauncher: () => ipcRenderer.send('admin:show-launcher'),
   pickImage: () => ipcRenderer.invoke('admin:pick-image'),
+  pickFolder: () => ipcRenderer.invoke('admin:pick-folder'),
+  pickApp: () => ipcRenderer.invoke('admin:pick-app'),
 
   getConfigHistory: () => ipcRenderer.invoke('config:getHistory'),
   restoreConfig: (index) => ipcRenderer.invoke('config:restore', index),
