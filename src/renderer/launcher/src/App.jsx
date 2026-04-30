@@ -215,13 +215,14 @@ export default function App() {
     let localStream
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-    } catch {
+    } catch (videoErr) {
+      console.error('[call] video+audio failed:', videoErr.name, videoErr.message)
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true })
-      } catch {
-        // No camera or mic — decline gracefully rather than connecting with empty stream
+      } catch (audioErr) {
+        console.error('[call] audio-only failed:', audioErr.name, audioErr.message)
         window.launcher.declineCall(from)
-        window.launcher.logActivity('call-failed-no-media')
+        window.launcher.logActivity('call-failed-no-media', `${audioErr.name}: ${audioErr.message}`)
         setIncomingCall(null)
         peerRef.current = null
         pc.close()
@@ -240,6 +241,7 @@ export default function App() {
 
     // Auto-hangup on connection failure or unexpected disconnect
     pc.onconnectionstatechange = () => {
+      console.log('[call] connection state:', pc.connectionState)
       if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
         window.launcher.logActivity('call-connection-lost', pc.connectionState)
         hangUp()
