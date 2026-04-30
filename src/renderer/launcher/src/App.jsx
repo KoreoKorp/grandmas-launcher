@@ -319,7 +319,7 @@ export default function App() {
       window.launcher.launchApp(tile.target)
     } else if (tile.type === 'built-in') {
       if (tile.target === 'messages') {
-        setView('messenger')
+        setView('messages')
         return
       }
       if (tile.target === 'music') {
@@ -393,6 +393,15 @@ export default function App() {
           weather={weather}
           onTileOpen={handleTileOpen}
           onHelpPress={handleHelpPress}
+        />
+      )}
+
+      {view === 'messages' && (
+        <MessagesView
+          contacts={config.contacts ?? []}
+          messengerBase={config.messenger?.url}
+          onBack={goHome}
+          onHelp={handleHelpPress}
         />
       )}
 
