@@ -12,6 +12,15 @@ export default function GamesView({ gamesConfig, onBack, onHelp }) {
     window.launcher.getLocalGames().then(setLocalGames)
   }, [])
 
+  // Electron webview fires custom DOM events — React JSX props can't wire them up
+  useEffect(() => {
+    const wv = webviewRef.current
+    if (!wv) return
+    const onLoad = () => setBrowserLoaded(true)
+    wv.addEventListener('did-finish-load', onLoad)
+    return () => wv.removeEventListener('did-finish-load', onLoad)
+  }, [])
+
   function launchLocalGame(game) {
     window.launcher.launchApp(game.path)
     window.launcher.logActivity('local-game-launch', game.name)
@@ -53,7 +62,6 @@ export default function GamesView({ gamesConfig, onBack, onHelp }) {
               src={onlineUrl}
               style={{ ...S.webview, display: browserLoaded ? 'flex' : 'none' }}
               partition="persist:games"
-              onDidFinishLoad={() => setBrowserLoaded(true)}
               allowpopups="true"
             />
           </div>
