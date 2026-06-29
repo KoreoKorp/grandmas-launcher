@@ -10,20 +10,58 @@ import ActivityLog from './components/ActivityLog'
 import ConfigRestore from './components/ConfigRestore'
 import GamesSettings from './components/GamesSettings'
 import PhotosSettings from './components/PhotosSettings'
+import SetupWizard from './components/SetupWizard'
+import CaregiverHandoff from './components/CaregiverHandoff'
 
-const TABS = [
-  { id: 'tiles', label: '🔲 Tiles' },
-  { id: 'myday', label: '📅 My Day' },
-  { id: 'contacts', label: '💬 Contacts' },
-  { id: 'weather', label: '🌤️ Weather' },
-  { id: 'games', label: '🎮 Games' },
-  { id: 'photos', label: '📸 Photos' },
-  { id: 'messenger', label: '📡 Messenger' },
-  { id: 'display', label: '🖥️ Display' },
-  { id: 'confusion', label: '🧭 Safety' },
-  { id: 'log', label: '📋 Activity' },
-  { id: 'restore', label: '↩️ Restore' }
+const SECTIONS = [
+  {
+    id: 'jeans-world',
+    label: "Jean's World",
+    icon: '🏠',
+    tabs: [
+      { id: 'tiles',   label: 'Home Screen' },
+      { id: 'myday',   label: 'My Day' },
+      { id: 'display', label: 'Display' },
+    ]
+  },
+  {
+    id: 'people',
+    label: 'People',
+    icon: '👥',
+    tabs: [
+      { id: 'contacts',  label: 'Contacts' },
+      { id: 'messenger', label: 'Messenger' },
+    ]
+  },
+  {
+    id: 'activities',
+    label: 'Activities',
+    icon: '🎯',
+    tabs: [
+      { id: 'weather', label: 'Weather' },
+      { id: 'games',   label: 'Games' },
+      { id: 'photos',  label: 'Photos' },
+    ]
+  },
+  {
+    id: 'caregiver',
+    label: 'Caregiver Tools',
+    icon: '🛠️',
+    tabs: [
+      { id: 'confusion', label: 'Safety' },
+      { id: 'log',       label: 'Activity Log' },
+      { id: 'restore',   label: 'Restore' },
+      { id: 'wizard',    label: 'Setup Wizard' },
+      { id: 'handoff',   label: 'Handoff' },
+    ]
+  }
 ]
+
+function sectionForTab(tabId) {
+  return SECTIONS.find(s => s.tabs.some(t => t.id === tabId))?.id
+}
+
+// ── PIN Gate ──────────────────────────────────────────────────────────────────
 
 function PinGate({ onUnlock }) {
   const [entry, setEntry] = useState('')
@@ -87,17 +125,88 @@ const pinStyles = {
   keySubmit: { background: 'var(--accent)', color: '#1e1e2e', border: 'none' }
 }
 
+// ── Sidebar Nav ───────────────────────────────────────────────────────────────
+
+function SideNav({ activeTab, onSelect }) {
+  const activeSection = sectionForTab(activeTab)
+  const [openSections, setOpenSections] = useState(() => new Set([activeSection]))
+
+  function toggleSection(sectionId) {
+    setOpenSections(prev => {
+      const next = new Set(prev)
+      if (next.has(sectionId)) { next.delete(sectionId) } else { next.add(sectionId) }
+      return next
+    })
+  }
+
+  function selectTab(tabId) {
+    const sec = sectionForTab(tabId)
+    setOpenSections(prev => new Set([...prev, sec]))
+    onSelect(tabId)
+  }
+
+  return (
+    <nav style={styles.nav}>
+      <div style={styles.navTitle}>Admin Panel</div>
+
+      {SECTIONS.map(section => {
+        const isOpen = openSections.has(section.id)
+        return (
+          <div key={section.id}>
+            <button
+              style={styles.sectionBtn}
+              onClick={() => toggleSection(section.id)}
+            >
+              <span>{section.icon} {section.label}</span>
+              <span style={{ fontSize: '0.75em', opacity: 0.6 }}>{isOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {isOpen && section.tabs.map(tab => (
+              <button
+                key={tab.id}
+                style={{
+                  ...styles.tabBtn,
+                  background: activeTab === tab.id ? 'rgba(245,184,112,0.15)' : 'transparent',
+                  color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-dim)',
+                }}
+                onClick={() => selectTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )
+      })}
+
+      <div style={{ flex: 1 }} />
+      <button
+        className="btn btn-ghost"
+        style={{ margin: '12px 16px', fontSize: '0.9em' }}
+        onClick={() => window.admin.showLauncher()}
+      >
+        Show Launcher
+      </button>
+    </nav>
+  )
+}
+
+// ── App ───────────────────────────────────────────────────────────────────────
+
 export default function App() {
   const [config, setConfig] = useState(null)
   const [unlocked, setUnlocked] = useState(false)
   const [activeTab, setActiveTab] = useState('tiles')
   const [helpAlert, setHelpAlert] = useState(false)
+  const [showWizard, setShowWizard] = useState(false)
 
   useEffect(() => {
     window.admin.getConfig().then(cfg => {
       setConfig(cfg)
-      // Skip PIN gate if no PIN is set
-      if (!cfg.adminPin) setUnlocked(true)
+      if (!cfg.adminPin) {
+        setUnlocked(true)
+        // First-run: open wizard automatically if name isn't set yet
+        if (!cfg.userName) setShowWizard(true)
+      }
     })
 
     window.admin.onHelpAlert(() => {
@@ -125,7 +234,6 @@ export default function App() {
 
   return (
     <div style={styles.root}>
-      {/* Help alert banner */}
       {helpAlert && (
         <div style={styles.helpBanner}>
           ⚠️ Grandma pressed the Help button! Go check on her.
@@ -133,96 +241,100 @@ export default function App() {
       )}
 
       <div style={styles.body}>
-      {/* Sidebar nav */}
-      <nav style={styles.nav}>
-        <div style={styles.navTitle}>Admin Panel</div>
-        {TABS.map(tab => (
-          <button
-            key={tab.id}
-            style={{
-              ...styles.navBtn,
-              background: activeTab === tab.id ? 'rgba(245,184,112,0.15)' : 'transparent',
-              color: activeTab === tab.id ? 'var(--accent)' : 'var(--text)'
-            }}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
+        <SideNav activeTab={activeTab} onSelect={setActiveTab} />
 
-        <div style={{ flex: 1 }} />
-        <button
-          className="btn btn-ghost"
-          style={{ margin: '12px 16px', fontSize: '0.9em' }}
-          onClick={() => window.admin.showLauncher()}
-        >
-          Show Launcher
-        </button>
-      </nav>
-
-      {/* Main content */}
-      <main style={styles.main}>
-        {activeTab === 'tiles' && (
-          <TileManager tiles={config.tiles} onSave={tiles => save('tiles', tiles)} />
-        )}
-        {activeTab === 'myday' && (
-          <MyDayEditor
-            dailyNote={config.dailyNote}
-            reminders={config.reminders}
-            userName={config.userName}
-            help={config.help}
-            onSaveNote={note => save('dailyNote', note)}
-            onSaveReminders={r => save('reminders', r)}
-            onSaveName={name => save('userName', name)}
-            onSaveHelp={h => save('help', { ...config.help, ...h })}
-          />
-        )}
-        {activeTab === 'contacts' && (
-          <ContactsManager
-            contacts={config.contacts}
-            onSave={contacts => save('contacts', contacts)}
-          />
-        )}
-        {activeTab === 'weather' && (
-          <WeatherSettings
-            weather={config.weather}
-            onSave={w => save('weather', { ...config.weather, ...w })}
-          />
-        )}
-        {activeTab === 'messenger' && (
-          <MessengerSettings
-            messenger={config.messenger}
-            onSave={m => save('messenger', { ...config.messenger, ...m })}
-          />
-        )}
-        {activeTab === 'display' && (
-          <DisplaySettings
-            display={config.display}
-            onSave={d => save('display', { ...config.display, ...d })}
-          />
-        )}
-        {activeTab === 'confusion' && (
-          <ConfusionSettings
-            confusion={config.confusion}
-            onSave={c => save('confusion', { ...config.confusion, ...c })}
-          />
-        )}
-        {activeTab === 'games' && (
-          <GamesSettings
-            games={config.games}
-            onSave={g => save('games', { ...config.games, ...g })}
-          />
-        )}
-        {activeTab === 'photos' && (
-          <PhotosSettings
-            photos={config.photos}
-            onSave={p => save('photos', { ...config.photos, ...p })}
-          />
-        )}
-        {activeTab === 'log' && <ActivityLog />}
-        {activeTab === 'restore' && <ConfigRestore />}
-      </main>
+        <main style={styles.main}>
+          {activeTab === 'tiles' && (
+            <TileManager tiles={config.tiles} onSave={tiles => save('tiles', tiles)} />
+          )}
+          {activeTab === 'myday' && (
+            <MyDayEditor
+              dailyNote={config.dailyNote}
+              reminders={config.reminders}
+              userName={config.userName}
+              help={config.help}
+              onSaveNote={note => save('dailyNote', note)}
+              onSaveReminders={r => save('reminders', r)}
+              onSaveName={name => save('userName', name)}
+              onSaveHelp={h => save('help', { ...config.help, ...h })}
+            />
+          )}
+          {activeTab === 'display' && (
+            <DisplaySettings
+              display={config.display}
+              onSave={d => save('display', { ...config.display, ...d })}
+            />
+          )}
+          {activeTab === 'contacts' && (
+            <ContactsManager
+              contacts={config.contacts}
+              onSave={contacts => save('contacts', contacts)}
+            />
+          )}
+          {activeTab === 'messenger' && (
+            <MessengerSettings
+              messenger={config.messenger}
+              onSave={m => save('messenger', { ...config.messenger, ...m })}
+            />
+          )}
+          {activeTab === 'weather' && (
+            <WeatherSettings
+              weather={config.weather}
+              onSave={w => save('weather', { ...config.weather, ...w })}
+            />
+          )}
+          {activeTab === 'games' && (
+            <GamesSettings
+              games={config.games}
+              onSave={g => save('games', { ...config.games, ...g })}
+            />
+          )}
+          {activeTab === 'photos' && (
+            <PhotosSettings
+              photos={config.photos}
+              onSave={p => save('photos', { ...config.photos, ...p })}
+            />
+          )}
+          {activeTab === 'confusion' && (
+            <ConfusionSettings
+              confusion={config.confusion}
+              onSave={c => save('confusion', { ...config.confusion, ...c })}
+            />
+          )}
+          {activeTab === 'log' && <ActivityLog />}
+          {activeTab === 'restore' && <ConfigRestore />}
+          {activeTab === 'wizard' && (
+            <div>
+              <h2>Setup Wizard</h2>
+              <div className="card">
+                <strong style={{ color: 'var(--text)' }}>Run the setup wizard</strong>
+                <p style={{ marginTop: 8, color: 'var(--text-dim)', fontSize: '0.9em', lineHeight: 1.6 }}>
+                  Walk through 5 quick questions to configure the essentials: grandma's name,
+                  location, admin PIN, messenger PIN, and help message.
+                </p>
+                <div style={{ marginTop: 14 }}>
+                  <button className="btn btn-primary" onClick={() => setShowWizard(true)}>
+                    Start Setup Wizard →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {activeTab === 'handoff' && (
+            <CaregiverHandoff
+              onImportComplete={() => window.admin.getConfig().then(setConfig)}
+            />
+          )}
+        </main>
       </div>
+
+      {showWizard && (
+        <SetupWizard
+          config={config}
+          onSave={save}
+          onClose={() => setShowWizard(false)}
+        />
+      )}
     </div>
   )
 }
@@ -267,17 +379,32 @@ const styles = {
     borderBottom: '1px solid var(--border)',
     marginBottom: 8
   },
-  navBtn: {
+  sectionBtn: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    padding: '10px 16px',
+    border: 'none',
+    background: 'transparent',
+    color: 'var(--text)',
+    fontSize: '0.88em',
+    fontWeight: 700,
+    textAlign: 'left',
+    cursor: 'pointer',
+    letterSpacing: '0.02em',
+    marginTop: 4,
+  },
+  tabBtn: {
     display: 'block',
     width: '100%',
-    padding: '11px 16px',
+    padding: '8px 16px 8px 28px',
     border: 'none',
     textAlign: 'left',
-    fontSize: '0.95em',
-    fontWeight: 600,
-    borderRadius: 0,
+    fontSize: '0.9em',
+    fontWeight: 500,
+    cursor: 'pointer',
     transition: 'background 0.1s, color 0.1s',
-    cursor: 'pointer'
   },
   main: {
     flex: 1,

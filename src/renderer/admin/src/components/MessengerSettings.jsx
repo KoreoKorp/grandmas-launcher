@@ -1,100 +1,101 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 export default function MessengerSettings({ messenger, onSave }) {
-  const [url, setUrl] = useState(messenger?.url || '')
-  const [saved, setSaved] = useState(false)
+  const [serverInfo, setServerInfo] = useState(null) // { port, lanIps }
   const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState(null) // null | { ok, msg }
+  const [testResult, setTestResult] = useState(null)
 
   const [turnUrl, setTurnUrl] = useState(messenger?.webrtc?.turnUrl ?? '')
   const [turnUsername, setTurnUsername] = useState(messenger?.webrtc?.turnUsername ?? '')
   const [turnCredential, setTurnCredential] = useState(messenger?.webrtc?.turnCredential ?? '')
   const [turnSaved, setTurnSaved] = useState(false)
 
-  // Always send the complete messenger object to prevent stale-state races
-  // between the URL save and TURN save merging against an out-of-date config.messenger
-  function fullPayload() {
-    return { url: url.trim(), webrtc: { ...(messenger?.webrtc ?? {}), turnUrl, turnUsername, turnCredential } }
-  }
-
-  async function save() {
-    await onSave(fullPayload())
-    setSaved(true)
-    setTestResult(null)
-    setTimeout(() => setSaved(false), 2500)
-  }
+  useEffect(() => {
+    window.admin.getMessengerInfo().then(setServerInfo).catch(() => setServerInfo(null))
+  }, [])
 
   async function saveTurn() {
-    await onSave(fullPayload())
+    await onSave({ ...messenger, webrtc: { ...(messenger?.webrtc ?? {}), turnUrl, turnUsername, turnCredential } })
     setTurnSaved(true)
     setTimeout(() => setTurnSaved(false), 2000)
   }
 
   async function testConnection() {
+    if (!serverInfo?.port) return
     setTesting(true)
     setTestResult(null)
     try {
-      // Try to reach the health endpoint; fall back to the root URL
-      const base = url.replace(/\/jean\.html.*$/, '')
-      const healthUrl = `${base}/api/health`
-      const res = await fetch(healthUrl, { method: 'GET', signal: AbortSignal.timeout(6000) })
+      const res = await fetch(`http://localhost:${serverInfo.port}/api/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(6000)
+      })
       if (res.ok) {
-        setTestResult({ ok: true, msg: '✓ Connected! Messenger is reachable.' })
+        setTestResult({ ok: true, msg: '✓ Embedded server is running and healthy.' })
       } else {
         setTestResult({ ok: false, msg: `Server responded with status ${res.status}.` })
       }
-    } catch (err) {
-      setTestResult({ ok: false, msg: 'Could not reach the messenger server. Check that it is running.' })
+    } catch {
+      setTestResult({ ok: false, msg: 'Could not reach the embedded server.' })
     }
     setTesting(false)
   }
 
-  const isDefaultIP = url.includes('34.132.145.35')
+  const localUrl = serverInfo?.port ? `http://localhost:${serverInfo.port}` : null
 
   return (
     <div>
-      <h2>Messenger Settings</h2>
+      <h2>Messenger</h2>
 
       <div className="card">
-        <div className="field">
-          <label>Messenger URL (Jean's view)</label>
-          <input
-            value={url}
-            onChange={e => setUrl(e.target.value)}
-            placeholder="http://yourdomain.com/jean.html"
-          />
-          <div style={{ fontSize: '0.82em', color: 'var(--text-dim)', marginTop: 5 }}>
-            This is the address that opens inside the launcher when Jean taps the Messages tile.
-          </div>
-        </div>
+        <strong style={{ color: 'var(--text)' }}>Embedded Server Status</strong>
+        <p style={{ marginTop: 6, marginBottom: 12, color: 'var(--text-dim)', fontSize: '0.9em', lineHeight: 1.5 }}>
+          The messenger server runs inside the launcher — no separate install needed.
+        </p>
 
-        {isDefaultIP && (
-          <div style={styles.notice}>
-            <span style={{ fontSize: '1.1em' }}>💡</span>
-            <div>
-              You're still using the raw IP address. Once you buy a domain and point it to the
-              server, paste the new URL here (e.g. <code>http://jean.yourdomain.com/jean.html</code>)
-              and click Save — no rebuild needed.
+        {serverInfo === null ? (
+          <div style={styles.badge}>Loading…</div>
+        ) : serverInfo.port ? (
+          <>
+            <div style={{ ...styles.badge, ...styles.badgeOn }}>
+              ● Running on port {serverInfo.port}
             </div>
-          </div>
-        )}
 
-        <div className="row" style={{ marginTop: 8 }}>
-          <button className="btn btn-primary" onClick={save}>Save</button>
-          <button className="btn btn-ghost" onClick={testConnection} disabled={testing}>
-            {testing ? 'Testing…' : '🔌 Test Connection'}
-          </button>
-          {saved && <span className="saved-notice">Saved!</span>}
-        </div>
+            <div style={{ marginTop: 12 }}>
+              <div style={styles.label}>Jean's URL (this device)</div>
+              <code style={styles.code}>{localUrl}/jean.html</code>
+            </div>
 
-        {testResult && (
-          <div style={{
-            ...styles.testBadge,
-            background: testResult.ok ? 'rgba(80,200,120,0.12)' : 'rgba(220,80,80,0.12)',
-            borderColor: testResult.ok ? 'rgba(80,200,120,0.4)' : 'rgba(220,80,80,0.4)',
-            color: testResult.ok ? '#4ec87a' : '#e05555'
-          }}>
-            {testResult.msg}
+            {serverInfo.lanIps?.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <div style={styles.label}>LAN access (other family devices)</div>
+                {serverInfo.lanIps.map(ip => (
+                  <div key={ip}>
+                    <code style={styles.code}>http://{ip}:{serverInfo.port}/jean.html</code>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="row" style={{ marginTop: 14 }}>
+              <button className="btn btn-ghost" onClick={testConnection} disabled={testing}>
+                {testing ? 'Testing…' : '🔌 Test Connection'}
+              </button>
+            </div>
+
+            {testResult && (
+              <div style={{
+                ...styles.testBadge,
+                background: testResult.ok ? 'rgba(80,200,120,0.12)' : 'rgba(220,80,80,0.12)',
+                borderColor: testResult.ok ? 'rgba(80,200,120,0.4)' : 'rgba(220,80,80,0.4)',
+                color: testResult.ok ? '#4ec87a' : '#e05555'
+              }}>
+                {testResult.msg}
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ ...styles.badge, ...styles.badgeOff }}>
+            ● Server not running
           </div>
         )}
       </div>
@@ -126,15 +127,13 @@ export default function MessengerSettings({ messenger, onSave }) {
       <div className="card">
         <strong style={{ color: 'var(--text)' }}>How the Messages tile works</strong>
         <p style={{ marginTop: 8, color: 'var(--text-dim)', fontSize: '0.9em', lineHeight: 1.6 }}>
-          When Jean taps the <strong>Messages</strong> tile, the launcher opens the URL above
-          in a full-screen embedded browser — she never sees a browser bar or address.
-          The page is your in-house messenger app (<code>jean.html</code>), which lets her
-          read and reply to family messages with large text and simple PIN login.
+          When Jean taps the <strong>Messages</strong> tile, the launcher opens a full-screen
+          messenger view — she never sees a browser bar or address. The server runs automatically
+          in the background whenever the launcher is open.
         </p>
         <p style={{ marginTop: 8, color: 'var(--text-dim)', fontSize: '0.9em', lineHeight: 1.6 }}>
-          <strong>To switch to a domain name:</strong> buy a domain (e.g. via Cloudflare
-          Registrar, ~$10–14/yr), add an A record pointing to <code>34.132.145.35</code>,
-          then update the URL above to <code>http://yourdomain.com/jean.html</code> and save.
+          Family members on the same network can open their browser to any of the LAN URLs above
+          to send Jean messages.
         </p>
       </div>
     </div>
@@ -142,18 +141,39 @@ export default function MessengerSettings({ messenger, onSave }) {
 }
 
 const styles = {
-  notice: {
-    display: 'flex',
-    gap: 10,
-    alignItems: 'flex-start',
-    background: 'rgba(245,184,112,0.1)',
-    border: '1px solid rgba(245,184,112,0.3)',
-    borderRadius: 8,
-    padding: '10px 14px',
-    fontSize: '0.88em',
+  label: {
+    fontSize: '0.8em',
     color: 'var(--text-dim)',
-    lineHeight: 1.5,
-    marginTop: 10
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em'
+  },
+  code: {
+    display: 'block',
+    background: 'rgba(255,255,255,0.06)',
+    borderRadius: 6,
+    padding: '6px 10px',
+    fontSize: '0.88em',
+    color: 'var(--text)',
+    marginBottom: 4,
+    wordBreak: 'break-all'
+  },
+  badge: {
+    display: 'inline-block',
+    padding: '5px 12px',
+    borderRadius: 20,
+    fontSize: '0.85em',
+    fontWeight: 600,
+    background: 'rgba(255,255,255,0.07)',
+    color: 'var(--text-dim)'
+  },
+  badgeOn: {
+    background: 'rgba(80,200,120,0.12)',
+    color: '#4ec87a'
+  },
+  badgeOff: {
+    background: 'rgba(220,80,80,0.12)',
+    color: '#e05555'
   },
   testBadge: {
     marginTop: 12,
