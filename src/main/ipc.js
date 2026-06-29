@@ -1,9 +1,11 @@
 import { ipcMain, shell, BrowserView, dialog, app } from 'electron'
 import { join } from 'path'
 import { readdir } from 'fs/promises'
+import os from 'os'
 import { store, logActivity, saveBackup, restoreBackup } from './store.js'
 import { fetchWeather, clearWeatherCache } from './weather.js'
 import { expandLauncher } from './windows.js'
+import { getMessengerPort } from './serverManager.js'
 
 let launcherWin = null
 let adminWin = null
@@ -183,6 +185,15 @@ export function registerIPC() {
   // ── Admin ─────────────────────────────────────────────────────────────────
 
   ipcMain.handle('admin:get-config', () => store.store)
+
+  ipcMain.handle('admin:get-messenger-info', () => {
+    const port = getMessengerPort()
+    const lanIps = Object.values(os.networkInterfaces())
+      .flat()
+      .filter(i => i && i.family === 'IPv4' && !i.internal)
+      .map(i => i.address)
+    return { port, lanIps }
+  })
 
   ipcMain.handle('admin:set', (event, { key, value }) => {
     saveBackup() // Save full config state before applying mutation
@@ -388,9 +399,8 @@ export function setupLauncherPermissions(launcherWin) {
       return
     }
 
-    // Auto-approve media permissions for the dedicated messenger web app
-    const messengerUrl = store.get('messenger.url')
-    if (messengerUrl && webContents.getURL().startsWith(messengerUrl) &&
+    // Auto-approve media permissions for the embedded messenger (served from localhost)
+    if (webContents.getURL().startsWith('http://localhost') &&
         ['camera', 'microphone', 'media'].includes(permission)) {
       callback(true)
       return

@@ -8,6 +8,7 @@ import { createWindows, expandLauncher } from './windows.js'
 import { registerIPC, setWindows, forceGoHome, setupLauncherPermissions, setSignalEmitter, closeEmbeddedBrowserSilent } from './ipc.js'
 import { fetchWeather } from './weather.js'
 import { store, logActivity } from './store.js'
+import { initMessengerServer, getMessengerUrl, stopMessengerServer } from './serverManager.js'
 
 // Prevent multiple instances
 if (!app.requestSingleInstanceLock()) {
@@ -29,7 +30,9 @@ app.on('second-instance', () => {
   }
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await initMessengerServer()
+
   registerIPC()
 
   const windows = createWindows()
@@ -67,10 +70,11 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   if (socket) socket.disconnect()
+  stopMessengerServer()
 })
 
 function setupSignaling() {
-  const url = store.get('messenger.url')
+  const url = getMessengerUrl()
   if (!url) return
 
   const deviceId = store.get('deviceId')
@@ -437,11 +441,10 @@ Power: ${isOnBattery ? 'Battery' : 'AC Plugged In'}`
 
       logActivity('boot-health-report-generated', reportMsg.replace(/\n/g, ' | '))
 
-      const { url, adminPassword } = store.get('messenger') || {}
+      const url           = getMessengerUrl()
+      const adminPassword = store.get('messenger.adminPassword') || ''
       if (!url) return
 
-      // Attempt to hit the backend messenger API to route this text to the caregiver.
-      // (Requires the proxy/messenger app to accept this generic payload)
       await fetch(`${url}/send-sys-report`, {
         method: 'POST',
         headers: {
@@ -457,7 +460,7 @@ Power: ${isOnBattery ? 'Battery' : 'AC Plugged In'}`
 }
 
 async function fetchTurnCredentials() {
-  const url = store.get('messenger.url')
+  const url = getMessengerUrl()
   if (!url) return
   
   try {

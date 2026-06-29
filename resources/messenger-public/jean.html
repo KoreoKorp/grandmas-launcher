@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Jean's Chat</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --purple:       #6B46C1;
+      --purple-dark:  #553C9A;
+      --purple-light: #EDE9FE;
+      --cream:        #FDF8F4;
+      --white:        #FFFFFF;
+      --gray-light:   #F3F4F6;
+      --gray:         #9CA3AF;
+      --text:         #1F2937;
+      --text-soft:    #4B5563;
+      --red:          #DC2626;
+      --red-light:    #FEE2E2;
+      --green:        #16A34A;
+      --green-light:  #DCFCE7;
+      --blue:         #2563EB;
+      --blue-light:   #DBEAFE;
+      --amber:        #D97706;
+      --amber-light:  #FEF3C7;
+      --pink:         #DB2777;
+      --pink-light:   #FCE7F3;
+      --shadow:       0 2px 12px rgba(0,0,0,0.10);
+      --shadow-lg:    0 8px 30px rgba(0,0,0,0.15);
+    }
+
+    html, body {
+      height: 100dvh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--cream);
+      color: var(--text);
+      font-size: 18px;
+      overflow: hidden;
+    }
+
+    /* ── Login Screen ─────────────────────────────────────── */
+    #login-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      gap: 24px;
+      padding: 20px;
+      background: linear-gradient(135deg, #6B46C1 0%, #9333EA 100%);
+    }
+
+    #login-screen .avatar {
+      width: 100px;
+      height: 100px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 56px;
+    }
+
+    #login-screen h1 {
+      color: white;
+      font-size: 36px;
+      font-weight: 700;
+      text-align: center;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    #login-screen p {
+      color: rgba(255,255,255,0.85);
+      font-size: 20px;
+      text-align: center;
+    }
+
+    .pin-display {
+      display: flex;
+      gap: 14px;
+      margin: 8px 0;
+    }
+
+    .pin-dot {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 3px solid rgba(255,255,255,0.6);
+      background: transparent;
+      transition: background 0.15s;
+    }
+
+    .pin-dot.filled {
+      background: white;
+      border-color: white;
+    }
+
+    .pin-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .pin-btn {
+      background: rgba(255,255,255,0.15);
+      border: 2px solid rgba(255,255,255,0.3);
+      color: white;
+      font-size: 28px;
+      font-weight: 600;
+      border-radius: 16px;
+      padding: 18px;
+      cursor: pointer;
+      transition: all 0.15s;
+      backdrop-filter: blur(4px);
+    }
+
+    .pin-btn:hover  { background: rgba(255,255,255,0.28); }
+    .pin-btn:active { transform: scale(0.95); background: rgba(255,255,255,0.35); }
+
+    .pin-btn.wide {
+      grid-column: span 1;
+    }
+
+    .pin-btn.clear {
+      background: rgba(255,100,100,0.25);
+      border-color: rgba(255,100,100,0.5);
+      font-size: 20px;
+    }
+
+    .pin-error {
+      color: #FCA5A5;
+      font-size: 18px;
+      text-align: center;
+      min-height: 26px;
+    }
+
+    /* ── Main App ─────────────────────────────────────────── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      overflow: hidden;
+    }
+
+    /* Top header bar */
+    .app-header {
+      background: var(--purple);
+      color: white;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .app-header h1 {
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .header-status {
+      font-size: 14px;
+      color: rgba(255,255,255,0.75);
+    }
+
+    #help-btn {
+      background: var(--red);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      padding: 10px 18px;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(220,38,38,0.4);
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    #help-btn:hover  { background: #B91C1C; }
+    #help-btn:active { transform: scale(0.95); }
+
+    #tts-btn {
+      background: rgba(255,255,255,0.15);
+      color: white;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 10px;
+      padding: 7px 12px;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    #tts-btn.muted { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.15); opacity: 0.55; }
+
+    /* Two-panel layout */
+    .layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Contact Sidebar ──────────────────────────────────── */
+    #sidebar {
+      width: 300px;
+      min-width: 300px;
+      background: var(--white);
+      border-right: 1px solid #E5E7EB;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 16px 18px;
+      background: var(--gray-light);
+      border-bottom: 1px solid #E5E7EB;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      flex-shrink: 0;
+    }
+
+    #contact-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .contact-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+      margin-bottom: 4px;
+    }
+
+    .contact-card:hover     { background: var(--purple-light); }
+    .contact-card.active    { background: var(--purple-light); border-left: 4px solid var(--purple); }
+    .contact-card.has-unread { background: #F5F0FF; }
+
+    .contact-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--purple-light);
+      color: var(--purple);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 700;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .online-dot {
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #22C55E;
+      border: 2px solid white;
+    }
+
+    .contact-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .contact-name {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .contact-preview {
+      font-size: 14px;
+      color: var(--text-soft);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+
+    .unread-badge {
+      background: var(--red);
+      color: white;
+      font-size: 13px;
+      font-weight: 700;
+      min-width: 24px;
+      height: 24px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 6px;
+      flex-shrink: 0;
+    }
+
+    .no-contacts {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--gray);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* ── Chat Area ────────────────────────────────────────── */
+    #chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--cream);
+    }
+
+    /* Empty state when no chat is selected */
+    #no-chat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      color: var(--gray);
+      padding: 40px;
+      text-align: center;
+    }
+
+    #no-chat .icon { font-size: 64px; }
+    #no-chat p     { font-size: 20px; line-height: 1.5; }
+
+    /* Chat header (shows when a conversation is open) */
+    #chat-header {
+      background: var(--white);
+      border-bottom: 1px solid #E5E7EB;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    #back-btn {
+      display: flex; /* always show so Jean can return to contact list */
+      background: var(--purple-light);
+      color: var(--purple);
+      border: none;
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #chat-person-avatar {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: var(--purple-light);
+      color: var(--purple);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    #chat-person-info { flex: 1; }
+    #chat-person-name { font-size: 20px; font-weight: 700; color: var(--text); }
+    #chat-person-status { font-size: 14px; color: var(--gray); margin-top: 1px; }
+
+    /* #call-btn removed — caused external window to open */
+    ._unused-call-btn {
+      background: var(--blue);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 10px 18px;
+      font-size: 17px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    /* Messages list */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 20px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scroll-behavior: smooth;
+    }
+
+    .msg-day-divider {
+      text-align: center;
+      font-size: 13px;
+      color: var(--gray);
+      margin: 8px 0;
+      position: relative;
+    }
+    .msg-day-divider::before {
+      content: '';
+      position: absolute;
+      left: 0; right: 0; top: 50%;
+      height: 1px;
+      background: #E5E7EB;
+      z-index: 0;
+    }
+    .msg-day-divider span {
+      background: var(--cream);
+      padding: 0 10px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .message {
+      display: flex;
+      flex-direction: column;
+      max-width: 72%;
+      gap: 3px;
+      animation: msgIn 0.2s ease;
+    }
+
+    @keyframes msgIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.from-jean    { align-self: flex-end; align-items: flex-end; }
+    .message.from-family  { align-self: flex-start; align-items: flex-start; }
+
+    .msg-sender {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-soft);
+      padding: 0 4px;
+    }
+
+    .msg-bubble {
+      padding: 12px 16px;
+      border-radius: 18px;
+      font-size: 18px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .from-jean   .msg-bubble { background: var(--purple); color: white; border-bottom-right-radius: 4px; }
+    .from-family .msg-bubble { background: var(--white);  color: var(--text); border-bottom-left-radius: 4px; box-shadow: var(--shadow); }
+
+    .msg-bubble.broadcast {
+      background: var(--red);
+      font-weight: 600;
+    }
+
+    .msg-time {
+      font-size: 12px;
+      color: var(--gray);
+      padding: 0 4px;
+    }
+
+    /* Typing indicator */
+    #typing-indicator {
+      padding: 8px 20px;
+      font-size: 15px;
+      color: var(--gray);
+      font-style: italic;
+      min-height: 30px;
+      flex-shrink: 0;
+    }
+
+    /* ── Quick Reply Buttons ───────────────────────────────── */
+    .quick-replies {
+      padding: 10px 16px;
+      background: var(--white);
+      border-top: 1px solid #F3F4F6;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .quick-btn {
+      border: none;
+      border-radius: 20px;
+      padding: 10px 16px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .quick-btn:active { transform: scale(0.96); }
+
+    .quick-btn.alert  { background: var(--red-light);   color: var(--red);   }
+    .quick-btn.ok     { background: var(--green-light);  color: var(--green); }
+    .quick-btn.call   { background: var(--blue-light);   color: var(--blue);  }
+    .quick-btn.visit  { background: var(--amber-light);  color: var(--amber); }
+    .quick-btn.love   { background: var(--pink-light);   color: var(--pink);  }
+    .quick-btn.goodnight { background: var(--purple-light); color: var(--purple); }
+
+    .quick-btn.alert:hover     { background: var(--red);   color: white; }
+    .quick-btn.ok:hover        { background: var(--green);  color: white; }
+    .quick-btn.call:hover      { background: var(--blue);   color: white; }
+    .quick-btn.visit:hover     { background: var(--amber);  color: white; }
+    .quick-btn.love:hover      { background: var(--pink);   color: white; }
+    .quick-btn.goodnight:hover { background: var(--purple); color: white; }
+
+    /* Broadcast banner */
+    #broadcast-confirm {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border-radius: 20px;
+      padding: 30px;
+      box-shadow: var(--shadow-lg);
+      text-align: center;
+      max-width: 340px;
+      width: 90%;
+      z-index: 100;
+      animation: popIn 0.2s ease;
+    }
+
+    @keyframes popIn {
+      from { transform: translate(-50%, -52%); opacity: 0; }
+      to   { transform: translate(-50%, -50%); opacity: 1; }
+    }
+
+    #broadcast-confirm h2 { font-size: 22px; margin-bottom: 10px; }
+    #broadcast-confirm p  { color: var(--text-soft); margin-bottom: 22px; font-size: 16px; line-height: 1.5; }
+
+    .confirm-btns {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .confirm-btns button {
+      flex: 1;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    #confirm-yes    { background: var(--red);   color: white; }
+    #confirm-cancel { background: var(--gray-light); color: var(--text); }
+    #confirm-yes:hover    { background: #B91C1C; }
+    #confirm-cancel:hover { background: #E5E7EB; }
+
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 99;
+      backdrop-filter: blur(2px);
+    }
+
+    /* ── Message Input ────────────────────────────────────── */
+    .input-area {
+      background: var(--white);
+      border-top: 1px solid #E5E7EB;
+      padding: 12px 16px;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+
+    #message-input {
+      flex: 1;
+      border: 2px solid #E5E7EB;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font-size: 18px;
+      font-family: inherit;
+      color: var(--text);
+      resize: none;
+      max-height: 120px;
+      line-height: 1.5;
+      transition: border-color 0.15s;
+      background: var(--gray-light);
+    }
+
+    #message-input:focus {
+      outline: none;
+      border-color: var(--purple);
+      background: var(--white);
+    }
+
+    #send-btn {
+      background: var(--purple);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      padding: 12px 22px;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+      align-self: flex-end;
+    }
+
+    #send-btn:hover  { background: var(--purple-dark); }
+    #send-btn:active { transform: scale(0.96); }
+    #send-btn:disabled { background: var(--gray); cursor: not-allowed; }
+
+    /* ── Toast Notification ────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #1F2937;
+      color: white;
+      padding: 14px 24px;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      z-index: 200;
+      transition: transform 0.3s ease;
+      box-shadow: var(--shadow-lg);
+      max-width: 90vw;
+      text-align: center;
+    }
+
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ── Mobile Responsive ─────────────────────────────────── */
+    @media (max-width: 700px) {
+      #sidebar {
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 100%;
+        z-index: 20;
+        transition: transform 0.25s ease;
+      }
+
+      #sidebar.hidden-mobile { transform: translateX(-100%); }
+
+      #chat-area { width: 100%; }
+
+      #back-btn { display: flex !important; }
+
+      .app-header h1 { font-size: 20px; }
+
+      .message { max-width: 85%; }
+
+      .quick-btn { font-size: 15px; padding: 9px 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Login Screen ─────────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="avatar">👵</div>
+  <h1>Hello, Jean!</h1>
+  <p>Enter your PIN to open your chat</p>
+  <div class="pin-display">
+    <div class="pin-dot" id="dot-0"></div>
+    <div class="pin-dot" id="dot-1"></div>
+    <div class="pin-dot" id="dot-2"></div>
+    <div class="pin-dot" id="dot-3"></div>
+  </div>
+  <div class="pin-error" id="pin-error"></div>
+  <div class="pin-grid">
+    <button class="pin-btn" onclick="addPin('1')">1</button>
+    <button class="pin-btn" onclick="addPin('2')">2</button>
+    <button class="pin-btn" onclick="addPin('3')">3</button>
+    <button class="pin-btn" onclick="addPin('4')">4</button>
+    <button class="pin-btn" onclick="addPin('5')">5</button>
+    <button class="pin-btn" onclick="addPin('6')">6</button>
+    <button class="pin-btn" onclick="addPin('7')">7</button>
+    <button class="pin-btn" onclick="addPin('8')">8</button>
+    <button class="pin-btn" onclick="addPin('9')">9</button>
+    <button class="pin-btn clear" onclick="clearPin()">⌫</button>
+    <button class="pin-btn" onclick="addPin('0')">0</button>
+    <button class="pin-btn" onclick="addPin('0')" style="visibility:hidden"></button>
+  </div>
+</div>
+
+<!-- ── Main App (hidden until logged in) ────────────────────── -->
+<div id="app" style="display:none">
+  <header class="app-header">
+    <div>
+      <h1>💬 Jean's Chat</h1>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <button id="tts-btn" title="Read messages aloud" onclick="toggleTts()">🔊</button>
+      <button id="help-btn" onclick="triggerHelpBroadcast()">🆘 I'm Scared</button>
+      <div class="header-status" id="header-status">Connecting...</div>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- Contact List Sidebar -->
+    <aside id="sidebar">
+      <div class="sidebar-header">Your Family &amp; Friends</div>
+      <div id="contact-list">
+        <div class="no-contacts" id="no-contacts-msg">
+          No contacts yet.<br>Ask to have some added!
+        </div>
+      </div>
+    </aside>
+
+    <!-- Chat Area -->
+    <main id="chat-area">
+
+      <!-- Empty state -->
+      <div id="no-chat">
+        <div class="icon">👈</div>
+        <p>Tap a name on the left<br>to start chatting!</p>
+      </div>
+
+      <!-- Active chat (hidden until a contact is selected) -->
+      <div id="active-chat" style="display:none; flex-direction:column; flex:1; overflow:hidden;">
+        <!-- Chat top bar -->
+        <div id="chat-header">
+          <button id="back-btn" onclick="showSidebar()">← Back</button>
+          <div id="chat-person-avatar">?</div>
+          <div id="chat-person-info">
+            <div id="chat-person-name">Name</div>
+            <div id="chat-person-status">Offline</div>
+          </div>
+        </div>
+
+        <!-- Messages -->
+        <div id="messages"></div>
+
+        <!-- Typing indicator -->
+        <div id="typing-indicator"></div>
+
+        <!-- Quick reply buttons (time-aware, rendered by renderQuickReplies()) -->
+        <div class="quick-replies" id="quick-replies"></div>
+
+        <!-- Text input -->
+        <div class="input-area">
+          <textarea
+            id="message-input"
+            placeholder="Type a message..."
+            rows="1"
+            onkeydown="handleInputKey(event)"
+            oninput="onTyping()"
+          ></textarea>
+          <button id="send-btn" onclick="sendMessage()">Send</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Broadcast confirmation dialog -->
+<div class="overlay" id="overlay" onclick="cancelBroadcast()"></div>
+<div id="broadcast-confirm">
+  <h2>🚨 Send Help Alert?</h2>
+  <p id="broadcast-msg-preview"></p>
+  <div class="confirm-btns">
+    <button id="confirm-cancel" onclick="cancelBroadcast()">Cancel</button>
+    <button id="confirm-yes"    onclick="confirmBroadcast()">Yes, Send to Everyone</button>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// ── State ────────────────────────────────────────────────────
+let socket        = null;
+let jeanPin       = '';
+let contacts      = [];   // All contacts with unread counts
+let activeRoomId  = null; // Currently open chat
+let typingTimer   = null;
+let pendingBroadcastText = null;
+
+// ── PIN Login ────────────────────────────────────────────────
+let pinInput = '';
+
+function addPin(digit) {
+  if (pinInput.length >= 4) return;
+  pinInput += digit;
+  updatePinDots();
+  if (pinInput.length === 4) {
+    setTimeout(() => attemptLogin(pinInput), 150);
+  }
+}
+
+function clearPin() {
+  pinInput = pinInput.slice(0, -1);
+  updatePinDots();
+  document.getElementById('pin-error').textContent = '';
+}
+
+function updatePinDots() {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById(`dot-${i}`).classList.toggle('filled', i < pinInput.length);
+  }
+}
+
+function attemptLogin(pin) {
+  jeanPin = pin;
+  connectSocket(pin);
+}
+
+// ── Socket Connection ────────────────────────────────────────
+function connectSocket(pin) {
+  socket = io();
+
+  socket.on('connect', () => {
+    socket.emit('jean-connect', { pin });
+  });
+
+  socket.on('jean-authenticated', async () => {
+    localStorage.setItem('jean-pin', pin);
+    showApp();
+    await loadContacts();
+
+    // Auto-open a specific chat if launched via URL parameter (e.g., ?room=corey)
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get('room') || params.get('chat') || params.get('id');
+    if (target) {
+      const match = contacts.find(c => c.slug === target || c.roomId === target);
+      if (match) {
+        openChat(match.roomId);
+      }
+    }
+  });
+
+  socket.on('auth-error', (msg) => {
+    document.getElementById('pin-error').textContent = '❌ ' + msg;
+    pinInput = '';
+    updatePinDots();
+    localStorage.removeItem('jean-pin');
+    if (socket) { socket.disconnect(); socket = null; }
+  });
+
+  socket.on('session-replaced', (msg) => {
+    showToast('⚠️ ' + msg);
+  });
+
+  socket.on('jean-status', ({ online }) => {
+    // We are Jean, ignore this
+  });
+
+  // A new message arrived
+  socket.on('new-message', ({ roomId, message }) => {
+    if (roomId === activeRoomId) {
+      // Currently viewing this chat — show message immediately
+      appendMessage(message);
+      socket.emit('jean-open-room', { roomId });
+      // Update contact preview without unread count
+      updateContactPreview(roomId, message, 0);
+      // Read family messages aloud
+      if (message.from !== 'jean') speakMessage(message.name, message.text);
+    } else {
+      // Not looking at this chat — increment unread
+      const contact = contacts.find(c => c.roomId === roomId);
+      if (contact) {
+        contact.unread = (contact.unread || 0) + 1;
+        contact.lastMessage = message;
+        renderContacts();
+      }
+      // Notify
+      const name = contact?.name || 'Someone';
+      showToast(`💬 New message from ${name}`);
+      // Browser notification
+      sendBrowserNotification(name, message.text);
+      // Read aloud even when in a different chat
+      if (message.from !== 'jean') speakMessage(name, message.text);
+    }
+  });
+
+  socket.on('message-sent', ({ roomId, message }) => {
+    // Message confirmed by server — already shown optimistically
+  });
+
+  socket.on('broadcast-sent', ({ text, count }) => {
+    showToast(`✅ Alert sent to all ${count} contacts!`);
+  });
+
+  socket.on('contact-online', ({ roomId, name }) => {
+    const contact = contacts.find(c => c.roomId === roomId);
+    if (contact) {
+      contact.online = true;
+      renderContacts();
+    }
+    if (roomId === activeRoomId) {
+      document.getElementById('chat-person-status').textContent = '🟢 Online now';
+    }
+  });
+
+  socket.on('contact-offline', ({ roomId }) => {
+    const contact = contacts.find(c => c.roomId === roomId);
+    if (contact) {
+      contact.online = false;
+      renderContacts();
+    }
+    if (roomId === activeRoomId) {
+      document.getElementById('chat-person-status').textContent = 'Last seen recently';
+    }
+  });
+
+  socket.on('contact-typing', ({ roomId, name }) => {
+    if (roomId === activeRoomId) {
+      document.getElementById('typing-indicator').textContent = `${name} is typing...`;
+    }
+  });
+
+  socket.on('contact-stopped-typing', ({ roomId }) => {
+    if (roomId === activeRoomId) {
+      document.getElementById('typing-indicator').textContent = '';
+    }
+  });
+
+  socket.on('disconnect', () => {
+    document.getElementById('header-status').textContent = '⚠️ Reconnecting...';
+  });
+
+  socket.on('reconnect', () => {
+    document.getElementById('header-status').textContent = 'Connected';
+    socket.emit('jean-connect', { pin: jeanPin });
+  });
+}
+
+// ── Show Main App ─────────────────────────────────────────────
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('header-status').textContent = 'Connected ✓';
+  requestNotificationPermission();
+}
+
+// ── Load Contacts ─────────────────────────────────────────────
+async function loadContacts() {
+  try {
+    const res  = await fetch('/api/jean/rooms', {
+      headers: { 'x-jean-pin': jeanPin }
+    });
+    const data = await res.json();
+    contacts   = data;
+    renderContacts();
+  } catch (err) {
+    console.error('Failed to load contacts:', err);
+  }
+}
+
+// ── Render Contact List ───────────────────────────────────────
+function renderContacts() {
+  const list = document.getElementById('contact-list');
+
+  if (contacts.length === 0) {
+    list.innerHTML = '<div class="no-contacts" id="no-contacts-msg">No contacts yet.<br>Ask to have some added!</div>';
+    return;
+  }
+
+  list.innerHTML = contacts.map(c => {
+    const initial   = c.name.charAt(0).toUpperCase();
+    const preview   = c.lastMessage ? truncate(c.lastMessage.text, 40) : 'No messages yet';
+    const unreadBadge = c.unread > 0 ? `<div class="unread-badge">${c.unread}</div>` : '';
+    const onlineDot   = c.online ? '<div class="online-dot"></div>' : '';
+    const activeClass = c.roomId === activeRoomId ? 'active' : '';
+    const unreadClass = c.unread > 0 ? 'has-unread' : '';
+
+    return `
+      <div class="contact-card ${activeClass} ${unreadClass}" onclick="openChat('${c.roomId}')">
+        <div class="contact-avatar">
+          ${initial}
+          ${onlineDot}
+        </div>
+        <div class="contact-info">
+          <div class="contact-name">${escHtml(c.name)}</div>
+          <div class="contact-preview">${escHtml(preview)}</div>
+        </div>
+        ${unreadBadge}
+      </div>
+    `;
+  }).join('');
+}
+
+function updateContactPreview(roomId, message, unread) {
+  const contact = contacts.find(c => c.roomId === roomId);
+  if (contact) {
+    contact.lastMessage = message;
+    contact.unread = unread;
+    renderContacts();
+  }
+}
+
+// ── Open a Conversation ───────────────────────────────────────
+async function openChat(roomId) {
+  activeRoomId = roomId;
+  const contact = contacts.find(c => c.roomId === roomId);
+  if (!contact) return;
+
+  // Update the header
+  const initial = contact.name.charAt(0).toUpperCase();
+  document.getElementById('chat-person-avatar').textContent = initial;
+  document.getElementById('chat-person-name').textContent   = contact.name;
+  document.getElementById('chat-person-status').textContent = contact.online ? '🟢 Online now' : 'Last seen recently';
+
+  // Clear messages and load history
+  document.getElementById('messages').innerHTML = '';
+  document.getElementById('typing-indicator').textContent = '';
+
+  try {
+    const res      = await fetch(`/api/messages/${roomId}`);
+    const messages = await res.json();
+
+    if (messages.length === 0) {
+      document.getElementById('messages').innerHTML =
+        '<div style="text-align:center; color:#9CA3AF; font-size:16px; padding: 30px 20px;">No messages yet.<br>Say hello! 👋</div>';
+    } else {
+      let lastDate = null;
+      messages.forEach(msg => {
+        const msgDate = new Date(msg.timestamp).toDateString();
+        if (msgDate !== lastDate) {
+          appendDayDivider(msg.timestamp);
+          lastDate = msgDate;
+        }
+        appendMessage(msg);
+      });
+    }
+  } catch (err) {
+    console.error('Failed to load messages:', err);
+  }
+
+  scrollToBottom();
+
+  // Mark as read
+  contact.unread = 0;
+  renderContacts();
+  socket.emit('jean-open-room', { roomId });
+
+  // Render time-aware quick replies
+  renderQuickReplies();
+
+  // Show active chat, hide "no chat" state
+  document.getElementById('no-chat').style.display = 'none';
+  const activeChat = document.getElementById('active-chat');
+  activeChat.style.display = 'flex';
+
+  // On mobile — hide sidebar
+  hideSidebar();
+
+  document.getElementById('message-input').focus();
+}
+
+// ── Send a Message ────────────────────────────────────────────
+function sendMessage() {
+  const input = document.getElementById('message-input');
+  const text  = input.value.trim();
+  if (!text || !activeRoomId) return;
+
+  // Show it immediately (optimistic UI)
+  appendMessage({
+    from:      'jean',
+    name:      'Jean',
+    text,
+    timestamp: new Date().toISOString()
+  });
+
+  socket.emit('jean-message', { roomId: activeRoomId, text });
+  input.value = '';
+  input.style.height = 'auto';
+  scrollToBottom();
+
+  updateContactPreview(activeRoomId, { text, from: 'jean', timestamp: new Date().toISOString() }, 0);
+}
+
+function quickSend(text) {
+  if (!activeRoomId) {
+    showToast('⚠️ Please select a person to chat with first!');
+    return;
+  }
+
+  // All quick messages (including "I need help") go only to the active chat
+  appendMessage({
+    from:      'jean',
+    name:      'Jean',
+    text,
+    timestamp: new Date().toISOString()
+  });
+
+  socket.emit('jean-message', { roomId: activeRoomId, text });
+  scrollToBottom();
+  updateContactPreview(activeRoomId, { text, from: 'jean', timestamp: new Date().toISOString() }, 0);
+}
+
+// ── Broadcast Confirm/Cancel ──────────────────────────────────
+function cancelBroadcast() {
+  pendingBroadcastText = null;
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('broadcast-confirm').style.display = 'none';
+}
+
+function confirmBroadcast() {
+  if (!pendingBroadcastText) return;
+  socket.emit('jean-broadcast', { text: pendingBroadcastText });
+
+  // Show the message in the active chat too
+  appendMessage({
+    from:      'jean',
+    name:      'Jean',
+    text:      pendingBroadcastText,
+    timestamp: new Date().toISOString(),
+    broadcast: true
+  });
+  scrollToBottom();
+
+  cancelBroadcast();
+}
+
+// ── Typing Indicator ──────────────────────────────────────────
+function onTyping() {
+  // Auto-resize textarea
+  const ta = document.getElementById('message-input');
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+
+  // Tell family member Jean is typing
+  if (activeRoomId) {
+    socket.emit('jean-typing', { roomId: activeRoomId });
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => {
+      socket.emit('jean-stopped-typing', { roomId: activeRoomId });
+    }, 1500);
+  }
+}
+
+// Send on Enter key (Shift+Enter for new line)
+function handleInputKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+// ── Append a Message Bubble ───────────────────────────────────
+function appendMessage(msg) {
+  const container = document.getElementById('messages');
+
+  // Remove "no messages" placeholder if present
+  const placeholder = container.querySelector('div[style*="text-align:center"]');
+  if (placeholder) placeholder.remove();
+
+  const isJean     = msg.from === 'jean';
+  const timeStr    = formatTime(msg.timestamp);
+  const div        = document.createElement('div');
+  div.className    = `message ${isJean ? 'from-jean' : 'from-family'}`;
+
+  div.innerHTML = `
+    ${!isJean ? `<div class="msg-sender">${escHtml(msg.name)}</div>` : ''}
+    <div class="msg-bubble ${msg.broadcast ? 'broadcast' : ''}">${escHtml(msg.text)}</div>
+    <div class="msg-time">${timeStr}</div>
+  `;
+
+  container.appendChild(div);
+  scrollToBottom();
+}
+
+function appendDayDivider(timestamp) {
+  const container = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg-day-divider';
+  div.innerHTML = `<span>${formatDate(timestamp)}</span>`;
+  container.appendChild(div);
+}
+
+function scrollToBottom() {
+  const m = document.getElementById('messages');
+  m.scrollTop = m.scrollHeight;
+}
+
+// ── Mobile Sidebar Toggle ─────────────────────────────────────
+function hideSidebar() {
+  if (window.innerWidth <= 700) {
+    document.getElementById('sidebar').classList.add('hidden-mobile');
+  }
+}
+
+function showSidebar() {
+  document.getElementById('sidebar').classList.remove('hidden-mobile');
+  activeRoomId = null;
+  document.getElementById('no-chat').style.display = 'flex';
+  document.getElementById('active-chat').style.display = 'none';
+}
+
+// ── Browser Notifications ─────────────────────────────────────
+function requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function sendBrowserNotification(name, text) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(`💬 Message from ${name}`, {
+      body: text,
+      icon: '/icon.png'
+    });
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── Utilities ─────────────────────────────────────────────────
+function formatTime(ts) {
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDate(ts) {
+  const d     = new Date(ts);
+  const today = new Date();
+  const yest  = new Date(); yest.setDate(yest.getDate() - 1);
+
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === yest.toDateString())  return 'Yesterday';
+  return d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+function truncate(str, len) {
+  return str.length > len ? str.slice(0, len) + '…' : str;
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Keep input above keyboard on mobile Chrome ────────────────
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    const app = document.getElementById('app');
+    if (app) app.style.height = window.visualViewport.height + 'px';
+  });
+}
+
+// ── TTS ───────────────────────────────────────────────────────
+let ttsEnabled = localStorage.getItem('jean-tts') !== 'off';
+
+function toggleTts() {
+  ttsEnabled = !ttsEnabled;
+  localStorage.setItem('jean-tts', ttsEnabled ? 'on' : 'off');
+  document.getElementById('tts-btn').classList.toggle('muted', !ttsEnabled);
+}
+
+function speakMessage(name, text) {
+  if (!ttsEnabled) return;
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(`Message from ${name}: ${text}`);
+  utt.rate  = 0.88;
+  utt.pitch = 1.0;
+  window.speechSynthesis.speak(utt);
+}
+
+// ── Permanent Help Broadcast ──────────────────────────────────
+function triggerHelpBroadcast() {
+  pendingBroadcastText = "🆘 I'm scared and need help! Please come check on me or call right away!";
+  document.getElementById('broadcast-msg-preview').textContent = pendingBroadcastText;
+  document.getElementById('overlay').style.display = 'block';
+  document.getElementById('broadcast-confirm').style.display = 'block';
+}
+
+// ── Time-Aware Quick Replies ──────────────────────────────────
+function getContextualReplies() {
+  const hour = new Date().getHours();
+  const core = [
+    { cls: 'ok',   text: "✅ I'm okay, just saying hi!",             label: "✅ I'm Okay!" },
+    { cls: 'call', text: "📞 Could you please call me when you can?", label: "📞 Please Call Me" },
+    { cls: 'visit',text: "🏠 I'd love a visit soon!",                 label: "🏠 Come Visit" },
+    { cls: 'love', text: "❤️ Just wanted to say I love you!",         label: "❤️ Love You" },
+  ];
+
+  let contextual = [];
+  if (hour >= 6 && hour < 12) {
+    contextual = [
+      { cls: 'ok',        text: "☀️ Good morning! Hope you have a great day.",   label: "☀️ Good Morning!" },
+      { cls: 'ok',        text: "🍳 Just had breakfast and feeling good!",        label: "🍳 Had Breakfast" },
+    ];
+  } else if (hour >= 12 && hour < 17) {
+    contextual = [
+      { cls: 'ok',        text: "🍽️ Just had lunch — it was good!",              label: "🍽️ Had Lunch" },
+      { cls: 'ok',        text: "☺️ Just checking in — I'm doing fine!",         label: "☺️ Checking In" },
+    ];
+  } else if (hour >= 17 && hour < 21) {
+    contextual = [
+      { cls: 'ok',        text: "🍽️ Just had dinner — it was lovely!",           label: "🍽️ Had Dinner" },
+      { cls: 'goodnight', text: "🌙 Good evening! Thinking of you.",             label: "🌙 Good Evening" },
+    ];
+  } else {
+    contextual = [
+      { cls: 'goodnight', text: "😴 Goodnight! Talk to you tomorrow.",           label: "😴 Goodnight" },
+      { cls: 'alert',     text: "💤 I can't sleep and wanted to reach out.",     label: "💤 Can't Sleep" },
+    ];
+  }
+
+  return [...contextual, ...core];
+}
+
+function renderQuickReplies() {
+  const container = document.getElementById('quick-replies');
+  if (!container) return;
+  const replies = getContextualReplies();
+  container.innerHTML = replies.map(r =>
+    `<button class="quick-btn ${r.cls}" onclick="quickSend(${JSON.stringify(r.text)})">${r.label}</button>`
+  ).join('');
+}
+
+// ── Auto-login if PIN is stored locally ──────────────────────
+window.addEventListener('load', () => {
+  // Apply TTS state
+  if (!ttsEnabled) document.getElementById('tts-btn').classList.add('muted');
+  const savedPin = localStorage.getItem('jean-pin');
+  if (savedPin) {
+    pinInput = savedPin;
+    updatePinDots();
+    setTimeout(() => attemptLogin(savedPin), 300);
+  }
+});
+</script>
+</body>
+</html>

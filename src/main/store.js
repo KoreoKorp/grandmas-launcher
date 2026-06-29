@@ -39,14 +39,20 @@ const defaults = {
     contactMethod: 'notification'
   },
   messenger: {
-    url: 'https://chat.jeankellmansmith.com',
-    adminPassword: '',
+    port:             3456,
+    jeanPin:          '',
+    adminPassword:    '',
+    discordWebhookUrl: '',
+    twilioAccountSid: '',
+    twilioAuthToken:  '',
+    twilioFrom:       '',
+    caregiverPhone:   '',
     webrtc: {
       iceServers: [
         { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
       ],
-      turnUrl: '',
-      turnUsername: '',
+      turnUrl:        '',
+      turnUsername:   '',
       turnCredential: ''
     }
   },
@@ -103,13 +109,6 @@ if (!store.get('deviceId')) {
 // Shared secret for call authentication (server must validate both)
 if (!store.get('authToken')) {
   store.set('authToken', crypto.randomUUID())
-}
-
-// Migrate old hardcoded messenger IP to new domain for existing installs
-const OLD_MESSENGER_URL = 'http://34.132.145.35:3000/jean.html'
-if (store.get('messenger.url') === OLD_MESSENGER_URL ||
-    store.get('messenger.url') === 'https://jeankellmansmith.com') {
-  store.set('messenger.url', 'https://chat.jeankellmansmith.com')
 }
 
 // Remove ghost tiles — web tiles saved with an empty target URL that survived
