@@ -15,12 +15,18 @@ export default function MessengerView({ onBack, onHelp, messengerUrl }) {
   const [error, setError] = useState(null)
   const iframeRef = React.useRef(null)
 
-  // Use the prop directly; fall back to the canonical domain — never hardcode IPs
-  const effectiveUrl = (messengerUrl || 'https://jeankellmansmith.com').replace(/\/+$/, '')
+  // messengerUrl is the embedded server's live URL (http://localhost:<port>),
+  // injected by the main process. No live-domain fallback: if it's missing the
+  // server isn't up, so we surface the offline state rather than the live site.
+  const effectiveUrl = (messengerUrl || '').replace(/\/+$/, '')
 
   // Test messenger connection on mount
   useEffect(() => {
     const checkConnection = async () => {
+      if (!effectiveUrl) {
+        setError('Messenger service is not running')
+        return
+      }
       try {
         // Build health-check URL from the base origin so it works regardless of path/port
         const healthUrl = new URL('/api/health', effectiveUrl).href

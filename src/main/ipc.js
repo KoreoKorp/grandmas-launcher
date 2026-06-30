@@ -5,7 +5,7 @@ import os from 'os'
 import { store, logActivity, saveBackup, restoreBackup } from './store.js'
 import { fetchWeather, clearWeatherCache } from './weather.js'
 import { expandLauncher } from './windows.js'
-import { getMessengerPort } from './serverManager.js'
+import { getMessengerPort, getMessengerUrl } from './serverManager.js'
 
 let launcherWin = null
 let adminWin = null
@@ -44,7 +44,10 @@ export function registerIPC() {
     display: store.get('display'),
     confusion: store.get('confusion'),
     help: store.get('help'),
-    messenger: store.get('messenger'),
+    // Always hand the launcher the live embedded server URL (dynamic port),
+    // not the stored config URL — otherwise the renderer points at the live
+    // domain or a stale port and the in-house messenger never loads.
+    messenger: { ...store.get('messenger'), url: getMessengerUrl() },
     games: store.get('games'),
     photos: store.get('photos'),
     userName: store.get('userName')

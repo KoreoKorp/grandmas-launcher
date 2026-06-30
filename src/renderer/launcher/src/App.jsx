@@ -409,7 +409,7 @@ export default function App() {
 
       {view === 'messenger' && (
         <MessengerView
-          messengerUrl={config.messenger?.url || 'http://localhost:3000'}
+          messengerUrl={config.messenger?.url}
           onBack={goHome}
           onHelp={handleHelpPress}
         />
