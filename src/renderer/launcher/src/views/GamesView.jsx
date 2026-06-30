@@ -149,7 +149,7 @@ const S = {
     background: 'var(--accent-dim)',
     borderColor: 'var(--accent)',
     color: 'var(--accent)',
-    boxShadow: '0 0 12px rgba(245,184,112,0.15)'
+    boxShadow: '0 0 12px rgba(235,181,82,0.15)'
   },
   helpBtn: {
     padding: '10px 18px',

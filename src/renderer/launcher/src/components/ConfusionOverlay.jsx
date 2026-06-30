@@ -66,7 +66,7 @@ const styles = {
   goHomeBtn: {
     padding: '20px 0',
     background: 'var(--accent)',
-    color: '#2a2a3c',
+    color: '#1C322D',
     borderRadius: 'var(--radius)',
     fontSize: 'calc(1.2em * var(--font-scale, 1))',
     fontWeight: 700,

@@ -135,7 +135,7 @@ const S = {
   bgLayer2: {
     position: 'absolute',
     inset: 0,
-    background: 'radial-gradient(ellipse at 50% 0%, rgba(245,184,112,0.06) 0%, transparent 70%)',
+    background: 'radial-gradient(ellipse at 50% 0%, rgba(235,181,82,0.06) 0%, transparent 70%)',
     zIndex: 1
   },
   content: {
@@ -153,8 +153,9 @@ const S = {
     padding: '16px 0 8px',
   },
   time: {
-    fontSize: 'calc(3.2em * var(--font-scale, 1))',
-    fontWeight: 800,
+    fontFamily: 'var(--font-display)',
+    fontSize: 'calc(3.4em * var(--font-scale, 1))',
+    fontWeight: 500,
     color: 'var(--text-primary)',
     lineHeight: 1,
     letterSpacing: -1,
@@ -178,7 +179,7 @@ const S = {
     alignItems: 'center',
     gap: 14,
     background: 'linear-gradient(135deg, var(--accent-dim) 0%, rgba(255,255,255,0.03) 100%)',
-    border: '1px solid rgba(245,184,112,0.25)',
+    border: '1px solid rgba(235,181,82,0.25)',
     borderRadius: 'var(--radius-sm)',
     padding: '12px 16px',
     boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
@@ -214,7 +215,7 @@ const S = {
   },
   noteCard: {
     background: 'var(--accent-dim)',
-    border: '1px solid rgba(245,184,112,0.25)',
+    border: '1px solid rgba(235,181,82,0.25)',
     borderLeft: '3px solid var(--accent)',
     borderRadius: 'var(--radius-xs)',
     padding: '12px 14px',
@@ -318,12 +319,12 @@ const S = {
     marginTop: 8,
     padding: '14px 36px',
     background: 'var(--accent)',
-    color: '#2a2a3c',
+    color: '#1C322D',
     borderRadius: 'var(--radius)',
     fontSize: 'calc(1.1em * var(--font-scale, 1))',
     fontWeight: 800,
     cursor: 'pointer',
     border: 'none',
-    boxShadow: '0 4px 12px rgba(245,184,112,0.3)'
+    boxShadow: '0 4px 12px rgba(235,181,82,0.3)'
   }
 }

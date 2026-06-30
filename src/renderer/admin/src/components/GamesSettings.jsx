@@ -119,7 +119,7 @@ const S = {
   addBtn: {
     padding: '8px 18px',
     background: 'var(--accent)',
-    color: '#2a2a3c',
+    color: '#1C322D',
     borderRadius: 8,
     fontWeight: 700,
     cursor: 'pointer',
@@ -160,7 +160,7 @@ const S = {
     alignSelf: 'flex-start',
     padding: '12px 28px',
     background: 'var(--accent)',
-    color: '#2a2a3c',
+    color: '#1C322D',
     borderRadius: 10,
     fontWeight: 800,
     cursor: 'pointer',

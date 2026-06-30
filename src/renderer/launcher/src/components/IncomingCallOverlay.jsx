@@ -72,7 +72,7 @@ const styles = {
   backdrop: { position: 'fixed', inset: 0, background: 'rgba(28,28,44,0.92)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' },
   card: { background: 'var(--bg-card)', border: '2px solid var(--accent)', borderRadius: 'var(--radius)', padding: '48px 56px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, minWidth: 360, textAlign: 'center' },
   avatar: { fontSize: 72 },
-  title: { fontSize: 'calc(1.5em * var(--font-scale, 1))', fontWeight: 700, color: 'var(--text-primary)' },
+  title: { fontFamily: 'var(--font-display)', fontSize: 'calc(1.5em * var(--font-scale, 1))', fontWeight: 700, color: 'var(--text-primary)' },
   name: { fontSize: 'calc(1.8em * var(--font-scale, 1))', fontWeight: 700, color: 'var(--accent)' },
   relation: { fontSize: 'calc(1.2em * var(--font-scale, 1))', fontWeight: 600, color: 'var(--text-primary)', marginTop: -12, marginBottom: 12 },
   countdown: { fontSize: 'calc(1em * var(--font-scale, 1))', color: 'var(--text-secondary)' },

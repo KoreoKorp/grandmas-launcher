@@ -25,7 +25,8 @@ const defaults = {
     launcherDisplay: 0,
     adminDisplay: 1,
     fontScale: 'medium',
-    volumeLevel: 40        // 0–100; enforced by PowerShell every 30s
+    volumeLevel: 40,       // 0–100; enforced by PowerShell every 30s
+    ambientBackground: true // calm dot-matrix field on the home screen
   },
   confusion: {
     inactivityMinutes: 10,

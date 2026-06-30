@@ -122,7 +122,7 @@ const pinStyles = {
   error: { color: '#e05555', fontSize: '0.85em', fontWeight: 600 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, width: '100%' },
   key: { padding: '16px 0', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, fontSize: '1.2em', fontWeight: 600, cursor: 'pointer', color: 'var(--text)', transition: 'filter 0.1s' },
-  keySubmit: { background: 'var(--accent)', color: '#1e1e2e', border: 'none' }
+  keySubmit: { background: 'var(--accent)', color: '#1C322D', border: 'none' }
 }
 
 // ── Sidebar Nav ───────────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ function SideNav({ activeTab, onSelect }) {
                 key={tab.id}
                 style={{
                   ...styles.tabBtn,
-                  background: activeTab === tab.id ? 'rgba(245,184,112,0.15)' : 'transparent',
+                  background: activeTab === tab.id ? 'rgba(235,181,82,0.15)' : 'transparent',
                   color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-dim)',
                 }}
                 onClick={() => selectTab(tab.id)}

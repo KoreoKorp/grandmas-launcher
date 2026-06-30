@@ -123,7 +123,7 @@ const S = {
     alignItems: 'center',
     gap: 8,
     background: 'var(--accent-dim)',
-    border: '1px solid rgba(245,184,112,0.15)',
+    border: '1px solid rgba(235,181,82,0.15)',
     borderRadius: 'var(--radius-xs)',
     padding: '8px 10px'
   },
@@ -152,14 +152,14 @@ const S = {
     gap: 10,
     padding: '16px 0',
     background: 'var(--accent)',
-    color: '#2a2a3c',
+    color: '#1C322D',
     borderRadius: 'var(--radius)',
     fontSize: 'calc(1.1em * var(--font-scale, 1))',
     fontWeight: 800,
     cursor: 'pointer',
     border: 'none',
     transition: 'filter 0.12s',
-    boxShadow: '0 4px 12px rgba(245,184,112,0.25)'
+    boxShadow: '0 4px 12px rgba(235,181,82,0.25)'
   },
   backBtn: {
     display: 'flex',

@@ -64,7 +64,7 @@ const styles = {
   root: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-main)' },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 28px', borderBottom: '1px solid var(--border)', background: 'var(--bg-card)', gap: 16, flexShrink: 0 },
   backBtn: { padding: '12px 20px', background: 'var(--bg-main)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: 'calc(1em * var(--font-scale, 1))', fontWeight: 600, cursor: 'pointer', flexShrink: 0 },
-  title: { fontSize: 'calc(1.4em * var(--font-scale, 1))', fontWeight: 700, color: 'var(--accent)', textAlign: 'center', flex: 1 },
+  title: { fontFamily: 'var(--font-display)', fontSize: 'calc(1.4em * var(--font-scale, 1))', fontWeight: 700, color: 'var(--accent)', textAlign: 'center', flex: 1 },
   helpBtn: { padding: '12px 20px', background: 'var(--help-bg)', border: '1.5px solid var(--help-border)', borderRadius: 'var(--radius-sm)', color: '#fff', fontSize: 'calc(1em * var(--font-scale, 1))', fontWeight: 600, cursor: 'pointer', flexShrink: 0 },
   body: { flex: 1, overflowY: 'auto', padding: 32 },
   contactGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 20 },

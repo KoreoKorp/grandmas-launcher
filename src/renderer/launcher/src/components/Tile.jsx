@@ -35,7 +35,7 @@ export default function Tile({ tile, onClick }) {
         cursor: 'pointer',
         ...(activating ? {
           borderColor: 'var(--accent)',
-          boxShadow: '0 0 0 3px rgba(245,184,112,0.3), var(--shadow-glow)'
+          boxShadow: '0 0 0 3px rgba(235,181,82,0.3), var(--shadow-glow)'
         } : {})
       }}
       onClick={handleClick}
@@ -54,7 +54,7 @@ export default function Tile({ tile, onClick }) {
       )}
       <span style={{
         ...S.label,
-        color: activating ? 'var(--accent)' : 'var(--text-primary)'
+        color: 'var(--text-on-card)'
       }}>
         {tile.label}
       </span>

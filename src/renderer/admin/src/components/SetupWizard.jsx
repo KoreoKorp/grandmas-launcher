@@ -49,7 +49,7 @@ export default function SetupWizard({ config, onSave, onClose }) {
         {/* Progress dots */}
         <div style={s.dots}>
           {STEPS.map((_, i) => (
-            <div key={i} style={{ ...s.dot, background: i === step ? 'var(--accent)' : i < step ? 'rgba(245,184,112,0.4)' : 'var(--border)' }} />
+            <div key={i} style={{ ...s.dot, background: i === step ? 'var(--accent)' : i < step ? 'rgba(235,181,82,0.4)' : 'var(--border)' }} />
           ))}
         </div>
 

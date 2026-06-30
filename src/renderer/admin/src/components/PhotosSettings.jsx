@@ -94,8 +94,8 @@ const S = {
     fontSize: '0.95em'
   },
   note: {
-    background: 'rgba(245,184,112,0.08)',
-    border: '1px solid rgba(245,184,112,0.25)',
+    background: 'rgba(235,181,82,0.08)',
+    border: '1px solid rgba(235,181,82,0.25)',
     borderRadius: 10,
     padding: '14px 18px',
     fontSize: '0.9em',
@@ -106,7 +106,7 @@ const S = {
     alignSelf: 'flex-start',
     padding: '12px 28px',
     background: 'var(--accent)',
-    color: '#2a2a3c',
+    color: '#1C322D',
     borderRadius: 10,
     fontWeight: 800,
     cursor: 'pointer',

@@ -5,6 +5,12 @@ export default function DisplaySettings({ display, onSave }) {
   const [saved, setSaved] = useState(false)
   const [volumeLevel, setVolumeLevel] = useState(display.volumeLevel ?? 40)
   const [volumeSaved, setVolumeSaved] = useState(false)
+  const [ambientBackground, setAmbientBackground] = useState(display.ambientBackground !== false)
+
+  async function saveAmbient(next) {
+    setAmbientBackground(next)
+    await onSave({ ambientBackground: next })
+  }
 
   const [newPin, setNewPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
@@ -54,6 +60,25 @@ export default function DisplaySettings({ display, onSave }) {
         <div className="row">
           <button className="btn btn-primary" onClick={saveFont}>Save</button>
           {saved && <span className="saved-notice">Saved!</span>}
+        </div>
+      </div>
+
+      <h2>Home Background</h2>
+      <div className="card">
+        <label style={{ display: 'flex', alignItems: 'center', gap: 12, textTransform: 'none', letterSpacing: 0, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={ambientBackground}
+            onChange={e => saveAmbient(e.target.checked)}
+            style={{ width: 'auto', cursor: 'pointer' }}
+          />
+          <span style={{ color: 'var(--text)', fontWeight: 600 }}>
+            Show the calm animated dot background on the home screen
+          </span>
+        </label>
+        <div style={{ fontSize: '0.82em', color: 'var(--text-dim)', marginTop: 8 }}>
+          Turn this off for a plain, still background. The animation also turns
+          itself off automatically when the system "reduce motion" setting is on.
         </div>
       </div>
 

@@ -136,6 +136,7 @@ const styles = {
   },
 
   title: {
+    fontFamily: 'var(--font-display)',
     fontSize: 'calc(1.4em * var(--font-scale, 1))',
     fontWeight: 700,
     color: 'var(--accent)',

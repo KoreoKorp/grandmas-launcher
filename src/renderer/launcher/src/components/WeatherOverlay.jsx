@@ -170,12 +170,12 @@ const S = {
     marginTop: 10,
     padding: '16px 44px',
     background: 'var(--accent)',
-    color: '#2a2a3c',
+    color: '#1C322D',
     border: 'none',
     borderRadius: 'var(--radius)',
     fontSize: 'calc(1.1em * var(--font-scale, 1))',
     fontWeight: 800,
     cursor: 'pointer',
-    boxShadow: '0 4px 16px rgba(245,184,112,0.3)'
+    boxShadow: '0 4px 16px rgba(235,181,82,0.3)'
   }
 }
