@@ -219,7 +219,9 @@ export default function App() {
 
   async function save(key, value) {
     await window.admin.set(key, value)
-    setConfig(prev => ({ ...prev, [key]: value }))
+    // Re-fetch config to properly handle nested keys (e.g., 'ai.openrouterKey')
+    const cfg = await window.admin.getConfig()
+    setConfig(cfg)
   }
 
   if (!config) {

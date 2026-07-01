@@ -231,7 +231,11 @@ export function registerIPC() {
             { role: 'system', content: `You are a warm, patient helper for an elderly person named ${userName}. Keep responses to 2–3 short sentences. Use plain, friendly language. No technical jargon.` },
             { role: 'user', content: message }
           ],
-          max_tokens: 250
+          max_tokens: 250,
+          // laguna-m.1 is a reasoning model; without this it spends the entire
+          // token budget "thinking" and returns null content. Disable reasoning
+          // so short helper answers land in message.content.
+          reasoning: { enabled: false }
         })
       })
       const data = await res.json()
@@ -311,7 +315,9 @@ export function registerIPC() {
             },
             { role: 'user', content: `${userName}'s recent activity log:\n\n${logText}` }
           ],
-          max_tokens: 350
+          max_tokens: 350,
+          // Disable reasoning (see ask-ai handler) so the digest text lands in content.
+          reasoning: { enabled: false }
         })
       })
       const data = await res.json()
