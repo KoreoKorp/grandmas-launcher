@@ -1,10 +1,14 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 
-export default function PhotosView({ photosConfig, onBack, onHelp }) {
+const SLIDESHOW_INTERVAL_MS = 5000
+
+export default function PhotosView({ photosConfig, onBack }) {
   const [localPhotos, setLocalPhotos] = useState([])
+  const [thumbs, setThumbs] = useState({})   // path → thumbnail dataURL
   const [loadError, setLoadError] = useState(false)
   const [albumLoaded, setAlbumLoaded] = useState(false)
-  const [selectedPhoto, setSelectedPhoto] = useState(null)
+  const [selectedIndex, setSelectedIndex] = useState(null)
+  const [slideshow, setSlideshow] = useState(false)
 
   const albumUrl = photosConfig?.albumUrl || ''
   const hasAlbum = !!albumUrl
@@ -12,6 +16,17 @@ export default function PhotosView({ photosConfig, onBack, onHelp }) {
   useEffect(() => {
     window.launcher.getLocalPhotos().then(photos => {
       setLocalPhotos(photos)
+      // Generate lightweight native thumbnails for the grid so we don't decode
+      // full-resolution images into memory. Full-res is used only in the lightbox.
+      Promise.all(
+        photos.map(p =>
+          window.launcher.getPhotoThumbnail(p.path).then(url => [p.path, url])
+        )
+      ).then(pairs => {
+        const map = {}
+        pairs.forEach(([path, url]) => { if (url) map[path] = url })
+        setThumbs(map)
+      })
     })
   }, [])
 
@@ -20,8 +35,47 @@ export default function PhotosView({ photosConfig, onBack, onHelp }) {
     setLoadError(true)
   }
 
+  const closeLightbox = useCallback(() => {
+    setSelectedIndex(null)
+    setSlideshow(false)
+  }, [])
+
+  const showPrev = useCallback((e) => {
+    e?.stopPropagation()
+    setSelectedIndex(i =>
+      i === null ? i : (i - 1 + localPhotos.length) % localPhotos.length
+    )
+  }, [localPhotos.length])
+
+  const showNext = useCallback((e) => {
+    e?.stopPropagation()
+    setSelectedIndex(i =>
+      i === null ? i : (i + 1) % localPhotos.length
+    )
+  }, [localPhotos.length])
+
+  // Keyboard navigation (arrows to move, Esc to close)
+  useEffect(() => {
+    if (selectedIndex === null) return
+    const onKey = (e) => {
+      if (e.key === 'ArrowLeft') showPrev()
+      else if (e.key === 'ArrowRight') showNext()
+      else if (e.key === 'Escape') closeLightbox()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedIndex, showPrev, showNext, closeLightbox])
+
+  // Slideshow auto-advance
+  useEffect(() => {
+    if (!slideshow || selectedIndex === null) return
+    const t = setInterval(() => showNext(), SLIDESHOW_INTERVAL_MS)
+    return () => clearInterval(t)
+  }, [slideshow, selectedIndex, showNext])
+
   const showLocal = !hasAlbum || loadError
   const hasLocalPhotos = localPhotos.length > 0
+  const selectedPhoto = selectedIndex !== null ? localPhotos[selectedIndex] : null
 
   return (
     <div style={S.wrap} className="view-slide-up">
@@ -29,7 +83,7 @@ export default function PhotosView({ photosConfig, onBack, onHelp }) {
       <div style={S.header}>
         <button style={S.backBtn} onClick={onBack}>← Back</button>
         <h2 style={S.title}>📸 Photos</h2>
-        <button style={S.helpBtn} onClick={onHelp}>💙 Help</button>
+        <div style={S.headerSpacer} />
       </div>
 
       <div style={S.content}>
@@ -61,13 +115,14 @@ export default function PhotosView({ photosConfig, onBack, onHelp }) {
                   <button
                     key={i}
                     style={S.photoCard}
-                    onClick={() => setSelectedPhoto(photo)}
+                    onClick={() => setSelectedIndex(i)}
                   >
                     <img
-                      src={photo.url}
+                      src={thumbs[photo.path] || photo.url}
                       alt={photo.name}
                       style={S.thumb}
                       loading="lazy"
+                      decoding="async"
                     />
                   </button>
                 ))}
@@ -87,14 +142,38 @@ export default function PhotosView({ photosConfig, onBack, onHelp }) {
 
       {/* Lightbox */}
       {selectedPhoto && (
-        <div style={S.lightbox} onClick={() => setSelectedPhoto(null)}>
+        <div style={S.lightbox} onClick={closeLightbox}>
+          {localPhotos.length > 1 && (
+            <button style={{ ...S.navArrow, ...S.navPrev }} onClick={showPrev} aria-label="Previous photo">‹</button>
+          )}
+
           <img
             src={selectedPhoto.url}
             alt={selectedPhoto.name}
             style={S.lightboxImg}
             onClick={e => e.stopPropagation()}
           />
-          <button style={S.closeBtn} onClick={() => setSelectedPhoto(null)}>✕</button>
+
+          {localPhotos.length > 1 && (
+            <button style={{ ...S.navArrow, ...S.navNext }} onClick={showNext} aria-label="Next photo">›</button>
+          )}
+
+          {/* Top-right controls */}
+          <div style={S.controls} onClick={e => e.stopPropagation()}>
+            {localPhotos.length > 1 && (
+              <button
+                style={{ ...S.controlBtn, ...(slideshow ? S.controlBtnActive : {}) }}
+                onClick={() => setSlideshow(s => !s)}
+              >
+                {slideshow ? '⏸ Pause' : '▶ Slideshow'}
+              </button>
+            )}
+            <button style={S.closeBtn} onClick={closeLightbox} aria-label="Close">✕</button>
+          </div>
+
+          {localPhotos.length > 1 && (
+            <div style={S.counter}>{selectedIndex + 1} / {localPhotos.length}</div>
+          )}
         </div>
       )}
     </div>
@@ -243,21 +322,86 @@ const S = {
     borderRadius: 'var(--radius)',
     boxShadow: 'var(--shadow-lg)'
   },
-  closeBtn: {
+  controls: {
     position: 'absolute',
     top: 20,
     right: 24,
-    width: 44,
-    height: 44,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    zIndex: 2
+  },
+  controlBtn: {
+    height: 48,
+    padding: '0 20px',
+    borderRadius: 24,
+    background: 'rgba(255,255,255,0.15)',
+    border: '1px solid rgba(255,255,255,0.3)',
+    color: '#fff',
+    fontSize: '1.05em',
+    fontWeight: 700,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center'
+  },
+  controlBtnActive: {
+    background: 'var(--accent)',
+    borderColor: 'var(--accent)',
+    color: 'var(--text-on-card)'
+  },
+  closeBtn: {
+    width: 48,
+    height: 48,
     borderRadius: '50%',
     background: 'rgba(255,255,255,0.15)',
     border: '1px solid rgba(255,255,255,0.3)',
     color: '#fff',
-    fontSize: '1.2em',
+    fontSize: '1.3em',
     fontWeight: 700,
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    flexShrink: 0
+  },
+  navArrow: {
+    position: 'absolute',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    width: 72,
+    height: 72,
+    borderRadius: '50%',
+    background: 'rgba(255,255,255,0.15)',
+    border: '1px solid rgba(255,255,255,0.3)',
+    color: '#fff',
+    fontSize: '2.6em',
+    fontWeight: 700,
+    lineHeight: 1,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: 6,
+    zIndex: 2
+  },
+  navPrev: { left: 24 },
+  navNext: { right: 24 },
+  counter: {
+    position: 'absolute',
+    bottom: 24,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    padding: '8px 18px',
+    borderRadius: 20,
+    background: 'rgba(0,0,0,0.5)',
+    border: '1px solid rgba(255,255,255,0.2)',
+    color: '#fff',
+    fontSize: '1.05em',
+    fontWeight: 700,
+    zIndex: 2
+  },
+  headerSpacer: {
+    width: 90,
+    flexShrink: 0
   }
 }

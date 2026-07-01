@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('launcher', {
   getMusic: () => ipcRenderer.invoke('launcher:get-music'),
   getLocalGames: () => ipcRenderer.invoke('launcher:get-local-games'),
   getLocalPhotos: () => ipcRenderer.invoke('launcher:get-local-photos'),
+  getPhotoThumbnail: (path) => ipcRenderer.invoke('launcher:get-photo-thumbnail', { path }),
+  askAI: (message) => ipcRenderer.invoke('launcher:ask-ai', { message }),
+  getGameIcon: (path) => ipcRenderer.invoke('launcher:get-game-icon', { path }),
 
   onWeatherUpdated: (cb) => {
     const h = (_, data) => cb(data)

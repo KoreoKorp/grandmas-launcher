@@ -7,8 +7,8 @@
   --bg-card-hover: #2E4A41;      /* lifted card */
   --bg-glass: rgba(36, 64, 58, 0.82);
   --bg-sage: #A2C2B3;            /* supporting/secondary surface */
-  --tile-surface: #F8F3EE;       /* cream editorial tile face */
-  --tile-surface-hover: #FFFFFF;
+  --tile-surface: #F3D08A;       /* warm amber tile face */
+  --tile-surface-hover: #F7DCA0;
   --border: #485E59;            /* hairline border */
   --border-subtle: rgba(255,255,255,0.10);
   --accent: #EBB552;            /* amber accent */
@@ -32,7 +32,7 @@
   --shadow-inset: inset 0 1px 0 rgba(255,255,255,0.5);
   --glass-blur: blur(18px);
   --glass-border: rgba(72,94,89,0.35);
-  --tile-gradient: linear-gradient(145deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.15) 100%);
+  --tile-gradient: linear-gradient(145deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.06) 100%);
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-bounce: 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -75,10 +75,11 @@ button {
 textarea, input { -webkit-user-select: text; user-select: text; }
 
 /* Font scale variants */
-.font-small  { --font-scale: 0.9; }
-.font-medium { --font-scale: 1; }
-.font-large  { --font-scale: 1.15; }
-.font-xlarge { --font-scale: 1.35; }
+.font-small   { --font-scale: 0.9; }
+.font-medium  { --font-scale: 1; }
+.font-large   { --font-scale: 1.15; }
+.font-xlarge  { --font-scale: 1.35; }
+.font-xxlarge { --font-scale: 1.6; }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: scale(0.97); }
@@ -114,6 +115,11 @@ textarea, input { -webkit-user-select: text; user-select: text; }
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
   50%       { transform: translateY(-4px); }
+}
+
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+  50%       { transform: scale(1.15); box-shadow: 0 2px 10px rgba(229,57,53,0.5); }
 }
 
 /* ── Glass card utility ──────────────────────────────────────── */
@@ -285,8 +291,8 @@ textarea, input { -webkit-user-select: text; user-select: text; }
   --bg-card:        #24403A;
   --bg-card-hover:  #2E4A41;
   --bg-glass:       rgba(36, 64, 58, 0.82);
-  --tile-surface:   #F8F3EE;
-  --tile-surface-hover: #FFFFFF;
+  --tile-surface:   #F3D08A;
+  --tile-surface-hover: #F7DCA0;
   --border:         #485E59;
   --accent:         #EBB552;
   --accent-hover:   #F1C775;
@@ -305,8 +311,8 @@ textarea, input { -webkit-user-select: text; user-select: text; }
   --bg-card:        #1C2E28;
   --bg-card-hover:  #25382F;
   --bg-glass:       rgba(28, 46, 40, 0.82);
-  --tile-surface:   #F3E9DC;
-  --tile-surface-hover: #FBF4EA;
+  --tile-surface:   #E8C17A;
+  --tile-surface-hover: #F3D08A;
   --border:         #3A4E48;
   --accent:         #E0A646;
   --accent-hover:   #EBB552;
@@ -319,6 +325,6 @@ textarea, input { -webkit-user-select: text; user-select: text; }
   --overlay-bg:     rgba(8, 16, 13, 0.97);
   --shadow-glow:    0 0 24px rgba(224,166,70,0.20), 0 12px 40px -12px rgba(0,0,0,0.5);
   --glass-border:   rgba(58,78,72,0.5);
-  --tile-gradient:  linear-gradient(145deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.12) 100%);
+  --tile-gradient:  linear-gradient(145deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0.05) 100%);
   --text-on-card:   #1C322D;
 }

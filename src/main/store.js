@@ -1,4 +1,5 @@
 import Store from 'electron-store'
+import { existsSync } from 'fs'
 
 const defaults = {
   tiles: [
@@ -61,6 +62,10 @@ const defaults = {
     localGames: [],
     onlineUrl: 'https://www.pogo.com'
   },
+  ai: {
+    openrouterKey: '',
+    model: 'poolside/laguna-m.1:free'
+  },
   photos: {
     albumUrl: '',
     localPath: ''
@@ -71,7 +76,8 @@ const defaults = {
     url: 'https://chat.jeankellmansmith.com/config.json',
     lastSyncedAt: null
   },
-  configHistory: []
+  configHistory: [],
+  migrations: {}    // one-time migration flags keyed by migration name
 }
 
 export const store = new Store({ defaults })
@@ -146,6 +152,47 @@ if (!weather.locations) {
     ? [{ id: crypto.randomUUID(), name: weather.location }]
     : []
   store.set('weather.locations', locations)
+}
+
+// Auto-populate local games from known installed game executables if list is empty
+{
+  const existingGames = store.get('games.localGames')
+  if (!existingGames || existingGames.length === 0) {
+    const candidates = [
+      { name: 'Bejeweled 2',              icon: '💎', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\Bejeweled 2 Deluxe\\Bejeweled2.exe' },
+      { name: 'Bejeweled',                icon: '💎', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\Bejeweled Deluxe\\Bejeweled.exe' },
+      { name: 'Bejeweled Twist',          icon: '🌀', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\Bejeweled Twist\\BejeweledTwist.exe' },
+      { name: 'Bookworm',                 icon: '📚', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\Bookworm Deluxe\\Bookworm.exe' },
+      { name: 'Chuzzle',                  icon: '🐾', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\Chuzzle Deluxe\\Chuzzle.exe' },
+      { name: 'Mahjong — Ancient China',  icon: '🀄', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\Mahjong Escape Ancient China\\MahjongEscapeAC.exe' },
+      { name: 'Mahjong — Ancient Japan',  icon: '🏯', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\Mahjong Escape Ancient Japan\\MahjongEscapeAJ.exe' },
+      { name: 'NingPo MahJong',           icon: '🀄', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\NingPo MahJong Deluxe\\Ningpo.exe' },
+      { name: 'Peggle',                   icon: '🎯', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\Peggle Deluxe\\Peggle.exe' },
+      { name: 'Peggle Nights',            icon: '🌙', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\Peggle Nights Deluxe\\PeggleNights.exe' },
+      { name: 'Zuma',                     icon: '🐸', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\Zuma Deluxe\\Zuma.exe' },
+      { name: "Zuma's Revenge",           icon: '🐸', path: "C:\\Program Files (x86)\\PopCap Games\\Zuma's Revenge\\ZumasRevenge.exe" },
+      { name: 'Insaniquarium',            icon: '🐠', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\Insaniquarium Deluxe\\Insaniquarium.exe' },
+      { name: 'Mystery PI',               icon: '🔍', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\Mystery PI - The Lottery Ticket\\MysteryPI.exe' },
+      { name: 'Mystery PI — New York',    icon: '🗽', path: 'C:\\Program Files (x86)\\Popcap Game Collection\\Mystery PI - The New York Fortune\\MysteryPINewYork.exe' },
+      { name: 'Luxor',                    icon: '🏛️', path: 'C:\\Program Files (x86)\\MumboJumbo\\LUXOR\\Luxor.exe' },
+      { name: 'Luxor 2',                  icon: '🏺', path: 'C:\\Program Files (x86)\\MumboJumbo\\LUXOR 2\\luxor2.exe' },
+      { name: 'Luxor Mahjong',            icon: '🀄', path: 'C:\\Program Files (x86)\\MumboJumbo\\LUXOR - Mah Jong\\Luxor Mahjong.exe' },
+      { name: 'Treasures of Montezuma',   icon: '🪙', path: 'C:\\Program Files (x86)\\GameFools\\The Treasures of Montezuma\\GAMEFOOLS-TheTreasuresofMontezuma.exe' },
+    ]
+    const available = candidates.filter(g => existsSync(g.path))
+    if (available.length > 0) {
+      store.set('games.localGames', available)
+    }
+  }
+}
+
+// One-time migration: add AI helper tile (skipped on subsequent launches so caregivers can remove it)
+if (!store.get('migrations.aiTileAdded')) {
+  const currentTiles = store.get('tiles')
+  if (!currentTiles.find(t => t.id === 'ai-helper')) {
+    store.set('tiles', [...currentTiles, { id: 'ai-helper', type: 'built-in', icon: '🤖', label: 'Ask AI', target: 'ai-helper' }])
+  }
+  store.set('migrations.aiTileAdded', true)
 }
 
 export function logActivity(type, detail = '') {
