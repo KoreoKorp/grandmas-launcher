@@ -12,6 +12,7 @@ import IncomingCallOverlay from './components/IncomingCallOverlay'
 import VideoCallOverlay from './components/VideoCallOverlay'
 import AudioPlayer from './components/AudioPlayer'
 import DailyCheckin from './components/DailyCheckin'
+import AIHelper from './components/AIHelper'
 
 export default function App() {
   const [config, setConfig] = useState(null)
@@ -24,6 +25,8 @@ export default function App() {
   const [browserLoaded, setBrowserLoaded] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
   const [showCheckin, setShowCheckin] = useState(false)
+  const [showAIHelper, setShowAIHelper] = useState(false)
+  const [missedCalls, setMissedCalls] = useState(0)
 
   const [incomingCall, setIncomingCall] = useState(null)   // { from, callerName, offer }
   const [activeCall, setActiveCall] = useState(null)        // { caller, localStream, remoteStream }
@@ -80,11 +83,11 @@ export default function App() {
     const cleanup = window.launcher.onIncomingCall((data) => {
       let relation = ''
       if (configRef.current && configRef.current.contacts) {
-        // Find by name matching or slug
         const c = configRef.current.contacts.find(c => c.name === data.callerName || (c.slug && c.slug === data.from))
         if (c && c.relation) relation = c.relation
       }
       setIncomingCall({ ...data, relation })
+      setMissedCalls(n => n + 1)
     })
     return cleanup
   }, [])
@@ -322,6 +325,7 @@ export default function App() {
     } else if (tile.type === 'built-in') {
       if (tile.target === 'messages') {
         setView('messages')
+        setMissedCalls(0)
         return
       }
       if (tile.target === 'music') {
@@ -337,6 +341,7 @@ export default function App() {
         return
       }
       if (tile.target === 'weather') setShowWeather(true)
+      if (tile.target === 'ai-helper') { setShowAIHelper(true); return }
     }
     window.launcher.logActivity('tile-open', tile.target)
   }
@@ -395,6 +400,7 @@ export default function App() {
           weather={weather}
           onTileOpen={handleTileOpen}
           onHelpPress={handleHelpPress}
+          badges={{ messages: missedCalls }}
         />
       )}
 
@@ -488,6 +494,13 @@ export default function App() {
       {showCheckin && (
         <DailyCheckin
           onComplete={() => setShowCheckin(false)}
+        />
+      )}
+
+      {showAIHelper && (
+        <AIHelper
+          aiAvailable={config?.ai?.available ?? false}
+          onClose={() => setShowAIHelper(false)}
         />
       )}
 

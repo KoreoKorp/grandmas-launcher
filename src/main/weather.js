@@ -29,12 +29,33 @@ export async function fetchWeatherForLocation(locationName, unit) {
     const { latitude, longitude, name } = geoData.results[0]
     const tempUnit = unit === 'F' ? 'fahrenheit' : 'celsius'
     const weatherRes = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weathercode,windspeed_10m&temperature_unit=${tempUnit}&windspeed_unit=mph&daily=sunset&timezone=auto`
+      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}` +
+      `&current=temperature_2m,weathercode,windspeed_10m,apparent_temperature,relativehumidity_2m` +
+      `&temperature_unit=${tempUnit}&windspeed_unit=mph` +
+      `&daily=sunset,temperature_2m_max,temperature_2m_min` +
+      `&hourly=temperature_2m,weathercode&forecast_hours=12&timezone=auto`
     )
     const weatherData = await weatherRes.json()
     const current = weatherData.current
     const daily = weatherData.daily || {}
+    const hourly = weatherData.hourly || {}
     const sunsetISO = daily.sunset?.length > 0 ? daily.sunset[0] : null
+
+    // Build next-6-hour forecast strip
+    const nowTime = current.time ?? ''
+    const hourlyTimes = hourly.time || []
+    const nowIdx = Math.max(0, hourlyTimes.findIndex(t => t >= nowTime))
+    const nextHours = hourlyTimes.slice(nowIdx, nowIdx + 6).map((t, i) => {
+      const hi = nowIdx + i
+      const rawHour = parseInt(t.split('T')[1] ?? '0', 10)
+      const ampm = rawHour >= 12 ? 'pm' : 'am'
+      const label = i === 0 ? 'Now' : `${rawHour === 0 ? 12 : rawHour > 12 ? rawHour - 12 : rawHour}${ampm}`
+      return {
+        label,
+        temp: Math.round((hourly.temperature_2m || [])[hi] ?? 0),
+        icon: wmoCodeToIcon((hourly.weathercode || [])[hi] ?? 0)
+      }
+    })
 
     const result = {
       temp: Math.round(current.temperature_2m),
@@ -42,7 +63,13 @@ export async function fetchWeatherForLocation(locationName, unit) {
       condition: wmoCodeToCondition(current.weathercode),
       icon: wmoCodeToIcon(current.weathercode),
       locationName: name,
-      sunset: sunsetISO
+      sunset: sunsetISO,
+      feelsLike: Math.round(current.apparent_temperature),
+      humidity: Math.round(current.relativehumidity_2m),
+      windSpeed: Math.round(current.windspeed_10m),
+      high: daily.temperature_2m_max?.[0] != null ? Math.round(daily.temperature_2m_max[0]) : null,
+      low:  daily.temperature_2m_min?.[0] != null ? Math.round(daily.temperature_2m_min[0]) : null,
+      hourly: nextHours
     }
 
     caches[locationName] = { data: result, at: Date.now() }

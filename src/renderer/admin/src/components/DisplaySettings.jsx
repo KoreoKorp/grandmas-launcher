@@ -3,6 +3,8 @@ import React, { useState } from 'react'
 export default function DisplaySettings({ display, onSave }) {
   const [fontScale, setFontScale] = useState(display.fontScale)
   const [saved, setSaved] = useState(false)
+  const [openrouterKey, setOpenrouterKey] = useState('')
+  const [aiKeySaved, setAiKeySaved] = useState(false)
   const [volumeLevel, setVolumeLevel] = useState(display.volumeLevel ?? 40)
   const [volumeSaved, setVolumeSaved] = useState(false)
   const [ambientBackground, setAmbientBackground] = useState(display.ambientBackground !== false)
@@ -55,6 +57,7 @@ export default function DisplaySettings({ display, onSave }) {
             <option value="medium">Medium (default)</option>
             <option value="large">Large</option>
             <option value="xlarge">Extra Large</option>
+            <option value="xxlarge">Maximum (biggest)</option>
           </select>
         </div>
         <div className="row">
@@ -139,6 +142,43 @@ export default function DisplaySettings({ display, onSave }) {
               {pinMsg.text}
             </span>
           )}
+        </div>
+      </div>
+
+      <h2>AI Helper (OpenRouter)</h2>
+      <div className="card">
+        {display.aiKeySet && !aiKeySaved && !openrouterKey && (
+          <div style={{ fontSize: '0.85em', color: 'var(--success)', fontWeight: 600, marginBottom: 8 }}>
+            ✓ API key is configured
+          </div>
+        )}
+        <div className="field">
+          <label>OpenRouter API Key</label>
+          <input
+            type="password"
+            value={openrouterKey}
+            onChange={e => setOpenrouterKey(e.target.value)}
+            placeholder={display.aiKeySet ? '(leave blank to keep existing key)' : 'sk-or-…'}
+          />
+          <div style={{ fontSize: '0.82em', color: 'var(--text-dim)', marginTop: 4 }}>
+            Get a free key at openrouter.ai. Powers the "Ask AI" tile on the home screen.
+          </div>
+        </div>
+        <div className="row">
+          <button
+            className="btn btn-primary"
+            disabled={!openrouterKey.trim()}
+            onClick={async () => {
+              if (!openrouterKey.trim()) return
+              await window.admin.set('ai.openrouterKey', openrouterKey.trim())
+              setOpenrouterKey('')
+              setAiKeySaved(true)
+              setTimeout(() => setAiKeySaved(false), 2000)
+            }}
+          >
+            Save Key
+          </button>
+          {aiKeySaved && <span className="saved-notice">Saved!</span>}
         </div>
       </div>
 

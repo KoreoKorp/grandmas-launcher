@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('admin', {
   pickApp: () => ipcRenderer.invoke('admin:pick-app'),
 
   getMessengerInfo: () => ipcRenderer.invoke('admin:get-messenger-info'),
+  generateDigest: () => ipcRenderer.invoke('admin:generate-digest'),
   getConfigHistory: () => ipcRenderer.invoke('config:getHistory'),
   restoreConfig: (index) => ipcRenderer.invoke('config:restore', index),
 

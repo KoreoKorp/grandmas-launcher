@@ -7,7 +7,7 @@ function isImagePath(icon) {
          /^[A-Z]:\\/i.test(icon)
 }
 
-export default function Tile({ tile, onClick }) {
+export default function Tile({ tile, onClick, badge = 0 }) {
   const [pressed, setPressed] = useState(false)
   const [activating, setActivating] = useState(false)
   const activatingTimer = useRef(null)
@@ -25,6 +25,7 @@ export default function Tile({ tile, onClick }) {
     <button
       className="tile-btn"
       style={{
+        position: 'relative',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -33,9 +34,14 @@ export default function Tile({ tile, onClick }) {
         minHeight: 160,
         padding: '20px 16px',
         cursor: 'pointer',
+        transform: pressed ? 'scale(0.92)' : 'scale(1)',
+        transition: 'transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.15s, box-shadow 0.15s',
         ...(activating ? {
           borderColor: 'var(--accent)',
           boxShadow: '0 0 0 3px rgba(235,181,82,0.3), var(--shadow-glow)'
+        } : {}),
+        ...(pressed ? {
+          boxShadow: '0 0 0 2px rgba(235,181,82,0.5), 0 4px 12px rgba(0,0,0,0.2)'
         } : {})
       }}
       onClick={handleClick}
@@ -45,6 +51,9 @@ export default function Tile({ tile, onClick }) {
       onTouchStart={() => setPressed(true)}
       onTouchEnd={() => setPressed(false)}
     >
+      {badge > 0 && (
+        <span style={S.badge}>{badge > 9 ? '9+' : badge}</span>
+      )}
       {activating ? (
         <span style={S.spinner}>⏳</span>
       ) : useImage ? (
@@ -63,6 +72,26 @@ export default function Tile({ tile, onClick }) {
 }
 
 const S = {
+  badge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    background: '#E53935',
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: 800,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0 5px',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+    animation: 'badgePulse 2s ease-in-out infinite',
+    pointerEvents: 'none',
+    zIndex: 2
+  },
   icon: {
     fontSize: 'calc(2.8em * var(--font-scale, 1))',
     lineHeight: 1,

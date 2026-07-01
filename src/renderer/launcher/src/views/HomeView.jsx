@@ -3,7 +3,7 @@ import Sidebar from '../components/Sidebar'
 import TileGrid from '../components/TileGrid'
 import AmbientBackground from '../components/AmbientBackground'
 
-export default function HomeView({ config, weather, onTileOpen, onHelpPress }) {
+export default function HomeView({ config, weather, onTileOpen, onHelpPress, badges }) {
   // Caregiver "calm" toggle — defaults on; AmbientBackground also self-disables
   // under prefers-reduced-motion.
   const ambientEnabled = config.display?.ambientBackground !== false
@@ -19,7 +19,7 @@ export default function HomeView({ config, weather, onTileOpen, onHelpPress }) {
           weather={weather}
           onHelpPress={onHelpPress}
         />
-        <TileGrid tiles={config.tiles} onTileOpen={onTileOpen} />
+        <TileGrid tiles={config.tiles} onTileOpen={onTileOpen} badges={badges} />
       </div>
     </div>
   )

@@ -1,14 +1,14 @@
 import React from 'react'
 import Tile from './Tile'
 
-export default function TileGrid({ tiles, onTileOpen }) {
+export default function TileGrid({ tiles, onTileOpen, badges = {} }) {
   // Use 3 columns for 7+ tiles, 2 columns for 6 or fewer
   const cols = tiles.length >= 7 ? 3 : 2
 
   return (
     <main style={{ ...styles.grid, gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
       {tiles.map(tile => (
-        <Tile key={tile.id} tile={tile} onClick={() => onTileOpen(tile)} />
+        <Tile key={tile.id} tile={tile} onClick={() => onTileOpen(tile)} badge={badges[tile.id] ?? 0} />
       ))}
     </main>
   )

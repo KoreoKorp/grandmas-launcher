@@ -1,15 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react'
 
 export default function GamesView({ gamesConfig, onBack, onHelp }) {
-  const [tab, setTab] = useState('online')
+  const [tab, setTab] = useState('local')
   const [localGames, setLocalGames] = useState([])
+  const [icons, setIcons] = useState({})   // path → dataURL
   const [browserLoaded, setBrowserLoaded] = useState(false)
   const webviewRef = useRef(null)
 
   const onlineUrl = gamesConfig?.onlineUrl || 'https://www.pogo.com'
 
   useEffect(() => {
-    window.launcher.getLocalGames().then(setLocalGames)
+    window.launcher.getLocalGames().then(games => {
+      setLocalGames(games)
+      // Load all .exe icons in parallel
+      Promise.all(
+        games.map(g =>
+          window.launcher.getGameIcon(g.path).then(url => [g.path, url])
+        )
+      ).then(pairs => {
+        const map = {}
+        pairs.forEach(([path, url]) => { if (url) map[path] = url })
+        setIcons(map)
+      })
+    })
   }, [])
 
   // Electron webview fires custom DOM events — React JSX props can't wire them up
@@ -80,15 +93,12 @@ export default function GamesView({ gamesConfig, onBack, onHelp }) {
             ) : (
               <div style={S.gameGrid}>
                 {localGames.map((game, i) => (
-                  <button
+                  <GameCard
                     key={i}
-                    style={S.gameCard}
-                    className="tile-btn"
+                    game={game}
+                    iconUrl={icons[game.path]}
                     onClick={() => launchLocalGame(game)}
-                  >
-                    <span style={S.gameIcon}>{game.icon || '🎮'}</span>
-                    <span style={S.gameName}>{game.name}</span>
-                  </button>
+                  />
                 ))}
               </div>
             )}
@@ -96,6 +106,44 @@ export default function GamesView({ gamesConfig, onBack, onHelp }) {
         )}
       </div>
     </div>
+  )
+}
+
+function GameCard({ game, iconUrl, onClick }) {
+  const [pressed, setPressed] = useState(false)
+  const [launched, setLaunched] = useState(false)
+
+  function handleClick() {
+    setLaunched(true)
+    setTimeout(() => setLaunched(false), 2500)
+    onClick()
+  }
+
+  return (
+    <button
+      style={{
+        ...S.gameCard,
+        transform: pressed ? 'scale(0.92)' : 'scale(1)',
+        transition: 'transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s',
+        ...(launched ? { boxShadow: '0 0 0 3px rgba(235,181,82,0.5), var(--shadow-glow)' } : {})
+      }}
+      onClick={handleClick}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      onMouseLeave={() => setPressed(false)}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+    >
+      <div style={S.iconWrap}>
+        {iconUrl ? (
+          <img src={iconUrl} alt={game.name} style={S.iconImg} draggable={false} />
+        ) : (
+          <span style={S.iconEmoji}>{game.icon || '🎮'}</span>
+        )}
+        {launched && <div style={S.launchRing} />}
+      </div>
+      <span style={S.gameName}>{game.name}</span>
+    </button>
   )
 }
 
@@ -217,29 +265,61 @@ const S = {
   },
   gameGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
     gap: 20
   },
   gameCard: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    minHeight: 150,
-    padding: '20px 16px',
-    cursor: 'pointer'
+    gap: 0,
+    padding: 0,
+    cursor: 'pointer',
+    background: 'var(--bg-card)',
+    border: '1.5px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    overflow: 'hidden',
+    boxShadow: 'var(--shadow-md)'
   },
-  gameIcon: {
-    fontSize: '2.8em',
+  iconWrap: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: '1 / 1',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'linear-gradient(145deg, #2a4a42, #1c3830)',
+    overflow: 'hidden'
+  },
+  iconImg: {
+    width: '72%',
+    height: '72%',
+    objectFit: 'contain',
+    imageRendering: 'auto',
+    filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))'
+  },
+  iconEmoji: {
+    fontSize: 56,
     lineHeight: 1,
-    filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.3))'
+    filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.4))'
+  },
+  launchRing: {
+    position: 'absolute',
+    inset: 0,
+    borderRadius: 'inherit',
+    border: '3px solid var(--accent)',
+    animation: 'pulse-glow 0.6s ease-out forwards',
+    pointerEvents: 'none'
   },
   gameName: {
-    fontSize: '1em',
+    width: '100%',
+    padding: '10px 12px',
+    fontSize: 'calc(0.88em * var(--font-scale, 1))',
     fontWeight: 700,
     textAlign: 'center',
     color: 'var(--text-primary)',
-    lineHeight: 1.2
+    lineHeight: 1.25,
+    background: 'var(--bg-card)',
+    borderTop: '1px solid var(--border-subtle)'
   }
 }

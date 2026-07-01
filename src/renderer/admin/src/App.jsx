@@ -12,6 +12,7 @@ import GamesSettings from './components/GamesSettings'
 import PhotosSettings from './components/PhotosSettings'
 import SetupWizard from './components/SetupWizard'
 import CaregiverHandoff from './components/CaregiverHandoff'
+import AIDailyDigest from './components/AIDailyDigest'
 
 const SECTIONS = [
   {
@@ -50,6 +51,7 @@ const SECTIONS = [
     tabs: [
       { id: 'confusion', label: 'Safety' },
       { id: 'log',       label: 'Activity Log' },
+      { id: 'digest',    label: 'AI Digest' },
       { id: 'restore',   label: 'Restore' },
       { id: 'wizard',    label: 'Setup Wizard' },
       { id: 'handoff',   label: 'Handoff' },
@@ -261,7 +263,7 @@ export default function App() {
           )}
           {activeTab === 'display' && (
             <DisplaySettings
-              display={config.display}
+              display={{ ...config.display, aiKeySet: !!(config.ai?.openrouterKey) }}
               onSave={d => save('display', { ...config.display, ...d })}
             />
           )}
@@ -302,6 +304,9 @@ export default function App() {
             />
           )}
           {activeTab === 'log' && <ActivityLog />}
+          {activeTab === 'digest' && (
+            <AIDailyDigest aiKeySet={!!(config.ai?.openrouterKey)} />
+          )}
           {activeTab === 'restore' && <ConfigRestore />}
           {activeTab === 'wizard' && (
             <div>
