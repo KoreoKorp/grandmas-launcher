@@ -1350,10 +1350,17 @@ function getContextualReplies() {
 function renderQuickReplies() {
   const container = document.getElementById('quick-replies');
   if (!container) return;
-  const replies = getContextualReplies();
-  container.innerHTML = replies.map(r =>
-    `<button class="quick-btn ${r.cls}" onclick="quickSend(${JSON.stringify(r.text)})">${r.label}</button>`
-  ).join('');
+  // Build real DOM nodes — injecting the text into an inline onclick attribute
+  // broke on the JSON double quotes (the attribute ended at the first one and
+  // every button threw a syntax error on click).
+  container.innerHTML = '';
+  getContextualReplies().forEach(r => {
+    const btn = document.createElement('button');
+    btn.className   = 'quick-btn ' + r.cls;
+    btn.textContent = r.label;
+    btn.addEventListener('click', () => quickSend(r.text));
+    container.appendChild(btn);
+  });
 }
 
 // ── Auto-login if PIN is stored locally ──────────────────────
