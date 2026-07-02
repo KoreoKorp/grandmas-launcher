@@ -3,6 +3,10 @@ import { join } from 'path'
 import { logActivity } from './store.js'
 import { forceGoHome } from './ipc.js'
 
+// Kept for the global admin shortcut — shortcut handlers outlive the
+// createWindows() call and need the current admin window
+let adminRef = null
+
 export function createWindows() {
   const displays = screen.getAllDisplays()
   // Prefer the largest display for launcher (external monitor), smallest for admin (laptop)
@@ -17,6 +21,7 @@ export function createWindows() {
 
   const launcher = createLauncherWindow(launcherDisplay)
   const admin = createAdminWindow(adminDisplay)
+  adminRef = admin
 
   return { launcher, admin }
 }
@@ -98,7 +103,26 @@ function createAdminWindow(display) {
     win.loadFile(join(__dirname, '../renderer/admin/index.html'))
   }
 
+  // forceShowAdmin() raises this window above the kiosk launcher; drop back to
+  // a normal window as soon as the caregiver clicks away so it doesn't cover
+  // Jean's screen forever
+  win.on('blur', () => {
+    if (!win.isDestroyed() && win.isAlwaysOnTop()) win.setAlwaysOnTop(false)
+  })
+
   return win
+}
+
+// Bring the admin panel to the front even over the fullscreen always-on-top
+// launcher (screen-saver z-level beats the launcher's own)
+export function forceShowAdmin() {
+  const win = adminRef
+  if (!win || win.isDestroyed()) return
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.setAlwaysOnTop(true, 'screen-saver')
+  win.focus()
+  logActivity('admin-shortcut-opened')
 }
 
 function registerLauncherShortcuts(win) {
@@ -127,6 +151,9 @@ function registerLauncherShortcuts(win) {
   globalShortcut.register('Ctrl+Shift+W', () => {
     shrinkLauncher(win)
   })
+
+  // Caregiver panel: Ctrl+Shift+A forces the admin window above the launcher
+  globalShortcut.register('Ctrl+Shift+A', forceShowAdmin)
 }
 
 export function shrinkLauncher(win) {
@@ -171,5 +198,9 @@ function registerAlwaysOnShortcuts(win) {
     logActivity('f24-registration-failed')
     console.warn('[F24] Could not register F24 shortcut — key may not exist on this keyboard')
   }
+
+  // Admin panel must be reachable regardless of which window has focus —
+  // this set replaces the launcher set on blur, so register it here too
+  globalShortcut.register('Ctrl+Shift+A', forceShowAdmin)
 }
 
