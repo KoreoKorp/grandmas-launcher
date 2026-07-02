@@ -476,7 +476,11 @@ function startSocket(pin, token) {
 
 // ── Message history ───────────────────────────────────────────
 function loadHistory() {
-  fetch('/api/messages/' + encodeURIComponent(identifier))
+  // The history endpoint requires auth — send the session token the server
+  // hands us on every successful connect, or the fetch 401s and history is
+  // silently empty (messages sent while this page was closed never appear).
+  var token = localStorage.getItem('jm_auth_' + identifier) || '';
+  fetch('/api/messages/' + encodeURIComponent(identifier), { headers: { 'x-session-token': token } })
     .then(function(res) { return res.ok ? res.json() : []; })
     .then(function(msgs) {
       var container = document.getElementById('messages');

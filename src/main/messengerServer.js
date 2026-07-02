@@ -340,11 +340,16 @@ export async function startServer(config) {
         } else if (pin) {
           if (isPinRateLimited(clientIP)) { socket.emit('auth-error', 'Too many attempts. Please wait 15 minutes and try again.'); return }
           if (pin !== contact.pin) { recordPinFailure(clientIP); socket.emit('auth-error', 'Incorrect PIN. Please try again.'); return }
-          socket.emit('auth-token', { token: contact.sessionToken })
         } else {
           socket.emit('pin-required'); return
         }
       }
+
+      // Always hand over the session token (not just on the PIN path) — the
+      // browser needs it as the x-session-token header to fetch /api/messages
+      // history; without it PIN-less contacts and token re-auths only ever see
+      // messages that arrive while their socket happens to be connected.
+      socket.emit('auth-token', { token: contact.sessionToken })
 
       const contacts = db.getContacts()
       const idx      = contacts.findIndex(c => c.id === contact.id)
