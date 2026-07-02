@@ -5,7 +5,7 @@ import os from 'os'
 import { store, logActivity, saveBackup, restoreBackup } from './store.js'
 import { fetchWeather, clearWeatherCache } from './weather.js'
 import { expandLauncher } from './windows.js'
-import { getMessengerPort, getMessengerUrl, updateMessengerConfig } from './serverManager.js'
+import { getMessengerPort, getMessengerUrl, updateMessengerConfig, syncMessengerContacts } from './serverManager.js'
 
 const PINTEREST_AD_CSS = `
   [data-test-id="ad-label"], [data-test-id*="promoted"], [data-test-id*="ad-pin"],
@@ -349,6 +349,8 @@ export function registerIPC() {
     // Apply changed messenger credentials (e.g. a new PIN) to the running
     // server immediately so they take effect without an app restart
     if (key === 'messenger') updateMessengerConfig(value)
+    // Mirror contact slugs/PINs into the messenger server so family links work
+    if (key === 'contacts') syncMessengerContacts(value)
     // Push config update to launcher
     if (launcherWin && !launcherWin.isDestroyed()) {
       launcherWin.webContents.send('launcher:config-updated', { key, value })
@@ -470,6 +472,7 @@ export function registerIPC() {
 // validating against the pre-rollback credentials.
 function applyRestoredConfigSideEffects() {
   updateMessengerConfig(store.get('messenger') || {})
+  syncMessengerContacts(store.get('contacts') || [])
   clearWeatherCache()
 }
 

@@ -108,12 +108,21 @@ export default function ContactsManager({ contacts, onSave }) {
                 <label>Messenger slug (e.g. <code>janetrhodes</code>)</label>
                 <input
                   value={c.slug || ''}
-                  onChange={e => update(c.id, 'slug', e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                  onChange={e => update(c.id, 'slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                   placeholder="e.g. janetrhodes"
                 />
                 <div style={{ fontSize: '0.8em', color: 'var(--text-dim)', marginTop: 4 }}>
-                  Jean's messenger opens: <strong>jeankellmansmith.com/{c.slug || 'slug'}</strong>
+                  Their chat link: <strong>chat.jeankellmansmith.com/chat/{c.slug || 'slug'}</strong>
                 </div>
+              </div>
+              <div className="field" style={{ marginBottom: 12 }}>
+                <label>Messenger PIN (optional — they enter this to open the chat)</label>
+                <input
+                  value={c.messengerPin || ''}
+                  onChange={e => update(c.id, 'messengerPin', e.target.value.replace(/\D/g, ''))}
+                  placeholder="e.g. 4321"
+                  maxLength={12}
+                />
               </div>
               <label>Pre-made messages</label>
               {c.messages.map((msg, i) => (

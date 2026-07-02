@@ -54,6 +54,10 @@ export async function initMessengerServer() {
   })
 
   activePort = port
+  // Heal on boot: make sure every launcher contact with a slug exists on the
+  // messenger server (they live in separate stores and can fall out of sync)
+  serverInstance.syncContacts(store.get('contacts') || [])
+
   if (port !== preferredPort) {
     // Do NOT persist a drifted port: the Cloudflare tunnel origin is pinned to
     // the configured port (3456), so overwriting the stored value would make
@@ -69,6 +73,12 @@ export async function initMessengerServer() {
 }
 
 export function getMessengerPort() { return activePort }
+
+// Mirror launcher contacts (slugs/PINs) into the messenger server's contact list
+export function syncMessengerContacts(contacts = []) {
+  if (!serverInstance || typeof serverInstance.syncContacts !== 'function') return
+  serverInstance.syncContacts(contacts)
+}
 
 // Push changed messenger credentials (e.g. a new PIN) to the running server
 // so they take effect immediately, without an app restart.

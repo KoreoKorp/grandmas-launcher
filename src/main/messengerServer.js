@@ -470,6 +470,54 @@ export async function startServer(config) {
         username:   next.turn.username   || '',
         credential: next.turn.credential || ''
       }
+    },
+    // Mirror the launcher's contact list (electron-store) into messenger
+    // contacts. The Electron admin panel is the only contact UI in practice —
+    // without this sync a slug typed there never exists on the server and the
+    // family link 404s. Contacts created here are tagged managedBy:'launcher'
+    // and removed again when their slug disappears from the launcher list;
+    // contacts made via the web /admin page are left untouched.
+    syncContacts(launcherContacts = []) {
+      const contacts = db.getContacts()
+      const seen     = new Set()
+      let   changed  = false
+
+      for (const lc of launcherContacts) {
+        const slug = (lc?.slug || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '')
+        if (!slug || seen.has(slug)) continue
+        seen.add(slug)
+
+        const existing = contacts.find(c => c.slug === slug)
+        if (!existing) {
+          contacts.push({
+            id:           crypto.randomBytes(4).toString('hex'),
+            name:         (lc.name || slug).trim(),
+            phone:        (lc.phone || '').replace(/[^0-9+\-() ]/g, '').trim(),
+            roomId:       crypto.randomBytes(12).toString('hex'),
+            slug,
+            pin:          (lc.messengerPin || '').trim() || null,
+            allowedIP:    null,
+            sessionToken: crypto.randomBytes(16).toString('hex'),
+            createdAt:    new Date().toISOString(),
+            managedBy:    'launcher'
+          })
+          changed = true
+        } else {
+          const name = (lc.name || '').trim()
+          if (name && existing.name !== name) { existing.name = name; changed = true }
+          const pin = (lc.messengerPin || '').trim() || null
+          if (existing.pin !== pin) {
+            existing.pin = pin
+            existing.sessionToken = crypto.randomBytes(16).toString('hex') // old sessions must re-auth
+            changed = true
+          }
+        }
+      }
+
+      const kept = contacts.filter(c => c.managedBy !== 'launcher' || seen.has(c.slug))
+      if (kept.length !== contacts.length) changed = true
+      if (changed) db.saveContacts(kept)
+      return changed
     }
   }
 }
