@@ -5,7 +5,7 @@ import os from 'os'
 import { store, logActivity, saveBackup, restoreBackup } from './store.js'
 import { fetchWeather, clearWeatherCache } from './weather.js'
 import { expandLauncher } from './windows.js'
-import { getMessengerPort, getMessengerUrl } from './serverManager.js'
+import { getMessengerPort, getMessengerUrl, updateMessengerConfig } from './serverManager.js'
 
 const PINTEREST_AD_CSS = `
   [data-test-id="ad-label"], [data-test-id*="promoted"], [data-test-id*="ad-pin"],
@@ -346,6 +346,9 @@ export function registerIPC() {
     store.set(key, value)
     // Bust weather cache when location/unit changes so next fetch is fresh
     if (key === 'weather') clearWeatherCache()
+    // Apply changed messenger credentials (e.g. a new PIN) to the running
+    // server immediately so they take effect without an app restart
+    if (key === 'messenger') updateMessengerConfig(value)
     // Push config update to launcher
     if (launcherWin && !launcherWin.isDestroyed()) {
       launcherWin.webContents.send('launcher:config-updated', { key, value })
@@ -355,9 +358,12 @@ export function registerIPC() {
 
   ipcMain.handle('admin:rollback-config', (event, { index }) => {
     const success = restoreBackup(index)
-    if (success && launcherWin && !launcherWin.isDestroyed()) {
-      // Re-send updated config payload to force launcher to re-render changes
-      launcherWin.webContents.send('launcher:config-updated', { key: 'ALL', value: store.store })
+    if (success) {
+      applyRestoredConfigSideEffects()
+      if (launcherWin && !launcherWin.isDestroyed()) {
+        // Re-send updated config payload to force launcher to re-render changes
+        launcherWin.webContents.send('launcher:config-updated', { key: 'ALL', value: store.store })
+      }
     }
     return { ok: success }
   })
@@ -370,6 +376,7 @@ export function registerIPC() {
   ipcMain.handle('config:restore', (_, index) => {
     const success = restoreBackup(index)
     if (success) {
+      applyRestoredConfigSideEffects()
       if (launcherWin && !launcherWin.isDestroyed()) {
         launcherWin.webContents.send('launcher:config-updated', { key: 'ALL', value: store.store })
       }
@@ -456,6 +463,14 @@ export function registerIPC() {
   ipcMain.on('launcher:decline-call', (_, { to }) => {
     emitSignal('call-declined', { to })
   })
+}
+
+// A restored backup may contain a different messenger PIN or weather location —
+// apply the same side effects admin:set does, or the running server keeps
+// validating against the pre-rollback credentials.
+function applyRestoredConfigSideEffects() {
+  updateMessengerConfig(store.get('messenger') || {})
+  clearWeatherCache()
 }
 
 function openEmbeddedBrowser(url, partition = null) {

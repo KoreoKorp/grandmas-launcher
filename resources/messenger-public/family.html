@@ -314,6 +314,12 @@ let requiresPin = false;
 let pinValue = '';
 let pc = null, localStream = null;
 let isTyping = false, typingTimer;
+// ICE servers pushed by the server after auth ('ice-config') — includes the
+// TURN relay when configured, which calls over the internet need to connect.
+let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+// Jean's ICE candidates can arrive before her answer; they must not be added
+// until setRemoteDescription has run, so queue them.
+let pendingCandidates = [];
 
 // ── Boot ─────────────────────────────────────────────────────
 async function init() {
@@ -434,22 +440,38 @@ function startSocket(pin, token) {
   socket.on('jean-stopped-typing', function() { document.getElementById('typing-indicator').textContent = ''; });
   socket.on('jean-read',           function() { document.querySelectorAll('.read-tick').forEach(function(el) { el.textContent = '✓✓'; }); });
 
+  socket.on('ice-config', function(data) {
+    if (data && Array.isArray(data.iceServers) && data.iceServers.length) {
+      iceServers = data.iceServers;
+    }
+  });
+
   socket.on('call-answered', function(data) {
     if (!pc) return;
     pc.setRemoteDescription(new RTCSessionDescription(data.answer))
-      .then(function() { document.getElementById('call-status-text').textContent = 'Connected'; })
+      .then(function() {
+        document.getElementById('call-status-text').textContent = 'Connected';
+        // Flush candidates that arrived before the answer
+        pendingCandidates.forEach(function(c) {
+          pc.addIceCandidate(new RTCIceCandidate(c)).catch(function() {});
+        });
+        pendingCandidates = [];
+      })
       .catch(function() { endCall(); });
   });
 
   socket.on('ice-candidate', function(data) {
-    if (pc && data.candidate) {
+    if (!pc || !data.candidate) return;
+    if (pc.remoteDescription) {
       pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(function() {});
+    } else {
+      pendingCandidates.push(data.candidate);
     }
   });
 
-  socket.on('call-ended',   function() { endCall(); });
-  socket.on('call-declined', function() { endCall(); flashCallBtn('Not available right now'); });
-  socket.on('call-failed',   function(data) { endCall(); flashCallBtn(data.reason || 'Call failed'); });
+  socket.on('call-ended',   function() { endCall(false); });
+  socket.on('call-declined', function() { endCall(false); flashCallBtn('Not available right now'); });
+  socket.on('call-failed',   function(data) { endCall(false); flashCallBtn(data.reason || 'Call failed'); });
 }
 
 // ── Message history ───────────────────────────────────────────
@@ -526,11 +548,12 @@ document.getElementById('end-call-btn').addEventListener('click', endCall);
 
 function startCall() {
   if (pc) return;
+  pendingCandidates = [];
   navigator.mediaDevices.getUserMedia({ video: true, audio: true })
     .catch(function() { return navigator.mediaDevices.getUserMedia({ video: false, audio: true }); })
     .then(function(stream) {
       localStream = stream;
-      pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      pc = new RTCPeerConnection({ iceServers: iceServers });
       localStream.getTracks().forEach(function(track) { pc.addTrack(track, localStream); });
       document.getElementById('local-video').srcObject = localStream;
 
@@ -557,10 +580,14 @@ function startCall() {
     .catch(function() { flashCallBtn('Camera/mic access denied'); });
 }
 
-function endCall() {
+// notify=false when the far side already ended the call — emitting call-ended
+// back would ping-pong hangup events between the two peers forever.
+function endCall(notify) {
+  var hadCall = !!pc;
   if (localStream) { localStream.getTracks().forEach(function(t) { t.stop(); }); localStream = null; }
   if (pc)          { pc.close(); pc = null; }
-  if (socket)      socket.emit('call-ended', {});
+  pendingCandidates = [];
+  if (notify !== false && hadCall && socket) socket.emit('call-ended', {});
   document.getElementById('call-overlay').style.display = 'none';
   document.getElementById('remote-video').srcObject = null;
   document.getElementById('local-video').srcObject  = null;

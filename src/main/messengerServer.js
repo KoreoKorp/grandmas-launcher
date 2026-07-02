@@ -79,13 +79,32 @@ function makeDataHelpers(dataDir) {
 export async function startServer(config) {
   const {
     dataDir, publicDir, port,
-    jeanPin         = '',
-    adminPassword   = '',
     launcherAuthToken = '',
-    discordWebhookUrl = '',
     turn   = {},
     twilio = {}
   } = config
+
+  // Credentials that the admin can change at runtime. Kept in `let` bindings
+  // (not consts captured in closures) so updateConfig() can swap them live —
+  // otherwise a new PIN set in the admin panel would never reach the running
+  // server and every PIN Jean types would be rejected until an app restart.
+  let jeanPin           = config.jeanPin           || ''
+  let adminPassword     = config.adminPassword     || ''
+  let discordWebhookUrl = config.discordWebhookUrl || ''
+  let turnConfig        = { url: turn.url || '', username: turn.username || '', credential: turn.credential || '' }
+
+  // ICE servers handed to family browsers over the socket after they
+  // authenticate. Family connects through the Cloudflare tunnel, so without a
+  // TURN relay most calls can't traverse NAT — STUN alone is only a fallback.
+  function buildIceServers() {
+    const servers = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }]
+    if (turnConfig.url) {
+      // Match the scheme, not the hostname — 'turn.example.com' must still get the prefix
+      const urls = /^turns?:/.test(turnConfig.url) ? turnConfig.url : `turn:${turnConfig.url}`
+      servers.push({ urls, username: turnConfig.username, credential: turnConfig.credential })
+    }
+    return servers
+  }
 
   if (!jeanPin)       console.warn('[messenger] jeanPin not set — Jean auth disabled')
   if (!adminPassword) console.warn('[messenger] adminPassword not set — admin auth disabled')
@@ -114,15 +133,25 @@ export async function startServer(config) {
   }
 
   // ── PIN rate limiting ──────────────────────────────────────
+  // Only FAILED attempts count against the budget — a family member
+  // reconnecting on flaky WiFi must not lock themselves out.
   const pinAttempts = new Map()
-  function checkPinRateLimit(ip) {
+  function isPinRateLimited(ip) {
+    const record = pinAttempts.get(ip)
+    if (!record) return false
+    if (Date.now() - record.since > 15 * 60 * 1000) { pinAttempts.delete(ip); return false }
+    return record.count >= 10
+  }
+  function recordPinFailure(ip) {
     const now    = Date.now()
     const record = pinAttempts.get(ip) || { count: 0, since: now }
-    if (now - record.since > 15 * 60 * 1000) { pinAttempts.set(ip, { count: 1, since: now }); return true }
-    if (record.count >= 10) return false
+    if (now - record.since > 15 * 60 * 1000) { record.count = 0; record.since = now }
     record.count++
     pinAttempts.set(ip, record)
-    return true
+  }
+  function socketIP(socket) {
+    return ((socket.handshake.headers['x-forwarded-for'] || '').split(',')[0].trim())
+      || socket.handshake.address
   }
 
   // ── Express + Socket.IO ────────────────────────────────────
@@ -221,10 +250,10 @@ export async function startServer(config) {
 
   // ── TURN credentials ───────────────────────────────────────
   expressApp.get('/api/turn', requireAdmin, (req, res) => {
-    if (!turn.url && !turn.username && !turn.credential) return res.json({ iceServers: [] })
+    if (!turnConfig.url) return res.json({ iceServers: [] })
     res.json({
-      turnUrl: turn.url, turnUsername: turn.username, turnCredential: turn.credential,
-      iceServers: [{ urls: `turn:${turn.url}`, username: turn.username, credential: turn.credential }]
+      turnUrl: turnConfig.url, turnUsername: turnConfig.username, turnCredential: turnConfig.credential,
+      iceServers: buildIceServers()
     })
   })
 
@@ -259,15 +288,16 @@ export async function startServer(config) {
   expressApp.get('/api/messages/:id', (req, res) => {
     const contact = db.findContact(req.params.id)
     if (!contact) return res.status(404).json({ error: 'Invalid room' })
-    const isAdmin  = req.headers['x-admin-key']      === adminPassword
-    const isFamily = req.headers['x-session-token']  === contact.sessionToken
-    const isJean   = req.headers['x-jean-pin']       === jeanPin
+    // Truthiness guards: an unset credential must never match an empty header
+    const isAdmin  = !!adminPassword && req.headers['x-admin-key']     === adminPassword
+    const isFamily = req.headers['x-session-token'] === contact.sessionToken
+    const isJean   = !!jeanPin       && req.headers['x-jean-pin']      === jeanPin
     if (!isAdmin && !isFamily && !isJean) return res.status(401).json({ error: 'Unauthorized' })
     res.json(db.getMessages(contact.roomId))
   })
 
   expressApp.get('/api/jean/rooms', (req, res) => {
-    if (req.headers['x-jean-pin'] !== jeanPin) return res.status(401).json({ error: 'Unauthorized' })
+    if (!jeanPin || req.headers['x-jean-pin'] !== jeanPin) return res.status(401).json({ error: 'Unauthorized' })
     const rooms = db.getContacts().map(contact => {
       const messages    = db.getMessages(contact.roomId)
       const lastMessage = messages[messages.length - 1] || null
@@ -286,7 +316,12 @@ export async function startServer(config) {
   io.on('connection', (socket) => {
 
     socket.on('jean-connect', ({ pin }) => {
-      if (pin !== jeanPin) { socket.emit('auth-error', 'Wrong PIN. Please try again.'); return }
+      // No PIN configured means auth would be an empty-string match — reject
+      // outright instead of letting anyone on the LAN connect as Jean.
+      if (!jeanPin) { socket.emit('auth-error', 'Messages is not set up yet. Please ask your helper to set a PIN in the settings.'); return }
+      const clientIP = socketIP(socket)
+      if (isPinRateLimited(clientIP)) { socket.emit('auth-error', 'Too many attempts. Please wait 15 minutes and try again.'); return }
+      if (pin !== jeanPin) { recordPinFailure(clientIP); socket.emit('auth-error', 'Wrong PIN. Please try again.'); return }
       if (jeanSocket && jeanSocket.id !== socket.id)
         jeanSocket.emit('session-replaced', "You opened Jean's chat in another window.")
       jeanSocket = socket; socket.isJean = true
@@ -297,15 +332,14 @@ export async function startServer(config) {
     socket.on('family-connect', async ({ roomId, pin, token }) => {
       const contact  = db.findContact(roomId)
       if (!contact) { socket.emit('auth-error', 'This chat link is not valid or has been removed.'); return }
-      const clientIP = ((socket.handshake.headers['x-forwarded-for'] || '').split(',')[0].trim())
-        || socket.handshake.address
+      const clientIP = socketIP(socket)
 
       if (contact.pin) {
         if (token) {
           if (token !== contact.sessionToken) { socket.emit('auth-error', 'Your session has expired. Please enter your PIN again.'); return }
         } else if (pin) {
-          if (!checkPinRateLimit(clientIP)) { socket.emit('auth-error', 'Too many attempts. Please wait 15 minutes and try again.'); return }
-          if (pin !== contact.pin) { socket.emit('auth-error', 'Incorrect PIN. Please try again.'); return }
+          if (isPinRateLimited(clientIP)) { socket.emit('auth-error', 'Too many attempts. Please wait 15 minutes and try again.'); return }
+          if (pin !== contact.pin) { recordPinFailure(clientIP); socket.emit('auth-error', 'Incorrect PIN. Please try again.'); return }
           socket.emit('auth-token', { token: contact.sessionToken })
         } else {
           socket.emit('pin-required'); return
@@ -329,6 +363,9 @@ export async function startServer(config) {
       socket.contact = contact
       socket.join(contact.roomId)
       socket.emit('family-authenticated', { name: contact.name })
+      // Hand the browser its ICE servers (STUN + TURN if configured) so video
+      // calls can traverse NAT — the page has no other authenticated way to get them
+      socket.emit('ice-config', { iceServers: buildIceServers() })
       if (jeanSocket) jeanSocket.emit('contact-online', { roomId: contact.roomId, name: contact.name })
     })
 
@@ -421,6 +458,18 @@ export async function startServer(config) {
   return {
     stop() {
       return new Promise(resolve => { io.close(); httpServer.close(resolve) })
+    },
+    // Apply changed credentials without restarting the server. Called when the
+    // admin panel saves messenger settings (e.g. a new PIN).
+    updateConfig(next = {}) {
+      if (next.jeanPin           !== undefined) jeanPin           = next.jeanPin           || ''
+      if (next.adminPassword     !== undefined) adminPassword     = next.adminPassword     || ''
+      if (next.discordWebhookUrl !== undefined) discordWebhookUrl = next.discordWebhookUrl || ''
+      if (next.turn              !== undefined) turnConfig        = {
+        url:        next.turn.url        || '',
+        username:   next.turn.username   || '',
+        credential: next.turn.credential || ''
+      }
     }
   }
 }

@@ -1,7 +1,7 @@
 import { app }      from 'electron'
 import path          from 'path'
 import net           from 'net'
-import { store }     from './store.js'
+import { store, logActivity } from './store.js'
 import { startServer } from './messengerServer.js'
 
 let serverInstance = null
@@ -54,13 +54,37 @@ export async function initMessengerServer() {
   })
 
   activePort = port
-  // Persist the port so admin UI can show the LAN URL
-  store.set('messenger.port', port)
+  if (port !== preferredPort) {
+    // Do NOT persist a drifted port: the Cloudflare tunnel origin is pinned to
+    // the configured port (3456), so overwriting the stored value would make
+    // every future boot prefer the drifted port and permanently break remote
+    // family access. Run on the fallback port for this session and log loudly.
+    console.warn(`[messenger] preferred port ${preferredPort} was busy — running on ${port}. Remote (tunnel) access is broken until ${preferredPort} is free again.`)
+    logActivity('messenger-port-drift', `wanted ${preferredPort}, got ${port} — tunnel access degraded`)
+  } else if (!store.get('messenger.port')) {
+    store.set('messenger.port', port)
+  }
 
   return port
 }
 
 export function getMessengerPort() { return activePort }
+
+// Push changed messenger credentials (e.g. a new PIN) to the running server
+// so they take effect immediately, without an app restart.
+export function updateMessengerConfig(messenger = {}) {
+  if (!serverInstance || typeof serverInstance.updateConfig !== 'function') return
+  serverInstance.updateConfig({
+    jeanPin:           messenger.jeanPin           || '',
+    adminPassword:     messenger.adminPassword     || '',
+    discordWebhookUrl: messenger.discordWebhookUrl || '',
+    turn: {
+      url:        messenger.webrtc?.turnUrl        || '',
+      username:   messenger.webrtc?.turnUsername   || '',
+      credential: messenger.webrtc?.turnCredential || ''
+    }
+  })
+}
 
 export function getMessengerUrl() {
   return activePort ? `http://localhost:${activePort}` : null

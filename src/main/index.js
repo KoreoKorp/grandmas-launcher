@@ -51,7 +51,6 @@ app.whenReady().then(async () => {
   setupScreenMirroring()
   setupAutoStart()
   sendBootHealthReport()
-  fetchTurnCredentials()
 
   app.on('activate', () => {
     if (!launcher || launcher.isDestroyed()) {
@@ -459,29 +458,9 @@ Power: ${isOnBattery ? 'Battery' : 'AC Plugged In'}`
   }, 15_000) // 15 seconds after boot to allow network to settle
 }
 
-async function fetchTurnCredentials() {
-  const url = getMessengerUrl()
-  if (!url) return
-  
-  try {
-    const res = await fetch(`${url}/api/turn`)
-    if (res.ok) {
-      const data = await res.json()
-      if (data.turnUrl || data.iceServers) {
-        const messenger = store.get('messenger')
-        store.set('messenger', {
-          ...messenger,
-          webrtc: {
-            ...messenger.webrtc,
-            turnUrl: data.turnUrl || messenger.webrtc.turnUrl,
-            turnUsername: data.turnUsername || messenger.webrtc.turnUsername,
-            turnCredential: data.turnCredential || messenger.webrtc.turnCredential
-          }
-        })
-        logActivity('turn-credentials-fetched')
-      }
-    }
-  } catch (err) {
-    console.warn('[turn] fail fetch', err.message)
-  }
-}
+// NOTE: TURN credentials are read from electron-store at server start and
+// pushed live via updateMessengerConfig() when the admin saves them. The old
+// fetchTurnCredentials() helper was removed — it fetched /api/turn from our own
+// embedded server (whose values came from the same store) and always 401'd
+// because it never sent the admin key. Family browsers now receive ICE servers
+// over the socket ('ice-config') after they authenticate.
