@@ -5,10 +5,12 @@ import dns from 'dns'
 import { writeFile } from 'fs/promises'
 import { io } from 'socket.io-client'
 import { createWindows, expandLauncher } from './windows.js'
-import { registerIPC, setWindows, forceGoHome, setupLauncherPermissions, setSignalEmitter, closeEmbeddedBrowserSilent } from './ipc.js'
+import { registerIPC, setWindows, forceGoHome, setupLauncherPermissions, setSignalEmitter, closeEmbeddedBrowser } from './ipc.js'
 import { fetchWeather } from './weather.js'
 import { store, logActivity } from './store.js'
 import { initMessengerServer, getMessengerUrl, stopMessengerServer } from './serverManager.js'
+import { startHeartbeat, registerWatchdogTask, writeHeartbeat } from './watchdog.js'
+import { initAdBlocker } from './adBlocker.js'
 
 // Prevent multiple instances
 if (!app.requestSingleInstanceLock()) {
@@ -50,7 +52,10 @@ app.whenReady().then(async () => {
   setupPowerMonitor()
   setupScreenMirroring()
   setupAutoStart()
+  startHeartbeat()
+  registerWatchdogTask()
   sendBootHealthReport()
+  initAdBlocker() // async, non-blocking — enableAdBlockingFor() fails open until ready
 
   app.on('activate', () => {
     if (!launcher || launcher.isDestroyed()) {
@@ -113,7 +118,7 @@ function setupSignaling() {
     isCallActive = true
     // CRITICAL: Close any active BrowserView FIRST — BrowserViews paint at OS
     // level on top of the BrowserWindow and will obscure the React overlay
-    closeEmbeddedBrowserSilent()
+    closeEmbeddedBrowser()
     if (launcher && !launcher.isDestroyed()) {
       launcher.webContents.send('launcher:incoming-call', { from, callerName, offer })
     }
@@ -130,6 +135,13 @@ function setupSignaling() {
     isCallActive = false
     if (launcher && !launcher.isDestroyed()) {
       launcher.webContents.send('launcher:call-ended', { from })
+    }
+  })
+
+  socket.on('family-radio-new', (clip) => {
+    logActivity('family-radio-received', clip.from)
+    if (launcher && !launcher.isDestroyed()) {
+      launcher.webContents.send('launcher:family-radio-new', clip)
     }
   })
 }
@@ -397,6 +409,13 @@ function setupPowerMonitor() {
       launcher.webContents.send('launcher:power-status', { status: 'ac' })
     }
   })
+
+  // On wake from sleep, write a fresh heartbeat immediately so the external
+  // watchdog doesn't mistake the pre-sleep timestamp for a hang and force-kill
+  // the healthy, just-resumed kiosk before the 15s heartbeat interval catches up.
+  const touchOnWake = () => writeHeartbeat()
+  powerMonitor.on('resume', touchOnWake)
+  powerMonitor.on('unlock-screen', touchOnWake)
 }
 
 // ── Phase 5: Caregiver Tools ───────────────────────────────────────────────

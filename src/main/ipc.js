@@ -6,6 +6,7 @@ import { store, logActivity, saveBackup, restoreBackup } from './store.js'
 import { fetchWeather, clearWeatherCache } from './weather.js'
 import { expandLauncher } from './windows.js'
 import { getMessengerPort, getMessengerUrl, updateMessengerConfig, syncMessengerContacts } from './serverManager.js'
+import { enableAdBlockingFor } from './adBlocker.js'
 
 const PINTEREST_AD_CSS = `
   [data-test-id="ad-label"], [data-test-id*="promoted"], [data-test-id*="ad-pin"],
@@ -57,6 +58,7 @@ export function registerIPC() {
     messenger: { ...store.get('messenger'), url: getMessengerUrl() },
     games: store.get('games'),
     photos: store.get('photos'),
+    familyRadio: store.get('familyRadio'),
     userName: store.get('userName'),
     ai: { available: !!(store.get('ai.openrouterKey') || process.env.OPENROUTER_API_KEY) }
   }))
@@ -245,6 +247,36 @@ export function registerIPC() {
     } catch (err) {
       console.error('[ask-ai] error:', err)
       return { error: err.message }
+    }
+  })
+
+  ipcMain.handle('launcher:get-family-radio-queue', async () => {
+    const url = getMessengerUrl()
+    if (!url) return []
+    try {
+      const res = await fetch(`${url}/api/family-radio/queue`, {
+        headers: { 'x-launcher-token': store.get('authToken') || '' }
+      })
+      if (!res.ok) return []
+      return await res.json()
+    } catch (err) {
+      console.warn('[family-radio] Failed to fetch queue:', err.message)
+      return []
+    }
+  })
+
+  ipcMain.handle('launcher:mark-family-radio-played', async (event, { id }) => {
+    const url = getMessengerUrl()
+    if (!url) return { ok: false }
+    try {
+      const res = await fetch(`${url}/api/family-radio/${id}/played`, {
+        method: 'POST',
+        headers: { 'x-launcher-token': store.get('authToken') || '' }
+      })
+      return { ok: res.ok }
+    } catch (err) {
+      console.warn('[family-radio] Failed to mark played:', err.message)
+      return { ok: false }
     }
   })
 
@@ -476,6 +508,45 @@ function applyRestoredConfigSideEffects() {
   clearWeatherCache()
 }
 
+// Ad funnels on embedded sites (Pinterest/news/YouTube) can chain into a
+// non-http(s) URL — a custom protocol handler, file://, chrome-extension://,
+// etc. — that Chromium's navigation layer may hand off to the OS outside
+// Electron's window management entirely, which is how a rabbit-hole of ad
+// taps has occasionally broken out of the kiosk. Block at will-navigate/
+// will-redirect (before the OS gets a chance to act on it), not after.
+function isSafeNavigationProtocol(targetUrl) {
+  try {
+    const protocol = new URL(targetUrl).protocol
+    // http/https are normal web navigation. about:/blob:/data: are harmless
+    // in-page schemes that legitimately fire will-navigate (downloads, some
+    // video players, share widgets) and stay inside the BrowserView — they are
+    // NOT OS handoffs, so we must not treat them as escape attempts. Everything
+    // else (mailto:, tel:, file:, custom app protocols, etc.) can hand off to
+    // the OS and still routes to escape recovery.
+    return (
+      protocol === 'http:' ||
+      protocol === 'https:' ||
+      protocol === 'about:' ||
+      protocol === 'blob:' ||
+      protocol === 'data:'
+    )
+  } catch {
+    return false
+  }
+}
+
+// Reuses the exact same recovery path as the BrowserView inactivity timeout
+// (close the view, show the existing calm ConfusionOverlay) so an escape
+// attempt looks identical to a pattern she's already familiar with — never
+// a new kind of "something went wrong" moment.
+function triggerEscapeRecovery(blockedUrl) {
+  logActivity('escape-attempt-blocked', blockedUrl)
+  closeEmbeddedBrowser()
+  if (launcherWin && !launcherWin.isDestroyed()) {
+    launcherWin.webContents.send('launcher:inactivity-timeout')
+  }
+}
+
 function openEmbeddedBrowser(url, partition = null) {
   if (!launcherWin) return
   closeEmbeddedBrowser()
@@ -488,6 +559,7 @@ function openEmbeddedBrowser(url, partition = null) {
   if (partition) webPreferences.partition = partition
 
   const view = new BrowserView({ webPreferences })
+  enableAdBlockingFor(view.webContents.session)
   launcherWin.addBrowserView(view)
   embeddedView = view
   setEmbeddedView(view)
@@ -497,10 +569,29 @@ function openEmbeddedBrowser(url, partition = null) {
   view.setBounds({ x: NAV_WIDTH, y: 0, width: bounds.width - NAV_WIDTH, height: bounds.height })
   view.webContents.loadURL(url)
 
-  // Block any new windows from opening in the system browser — keep all navigation inside the BrowserView
+  // Block any new windows from opening in the system browser — keep all navigation inside the BrowserView.
+  // A programmatic loadURL does not fire will-navigate, so we must apply the same protocol guard here;
+  // otherwise window.open('file:///...') or a custom-protocol URL would load straight into the kiosk view.
   view.webContents.setWindowOpenHandler(({ url: newUrl }) => {
-    view.webContents.loadURL(newUrl)
+    if (!isSafeNavigationProtocol(newUrl)) {
+      triggerEscapeRecovery(newUrl)
+    } else {
+      view.webContents.loadURL(newUrl)
+    }
     return { action: 'deny' }
+  })
+
+  view.webContents.on('will-navigate', (event, navUrl) => {
+    if (!isSafeNavigationProtocol(navUrl)) {
+      event.preventDefault()
+      triggerEscapeRecovery(navUrl)
+    }
+  })
+  view.webContents.on('will-redirect', (event, navUrl) => {
+    if (!isSafeNavigationProtocol(navUrl)) {
+      event.preventDefault()
+      triggerEscapeRecovery(navUrl)
+    }
   })
 
   // Signal renderer on every page load and inject site-specific CSS
@@ -522,7 +613,7 @@ function openEmbeddedBrowser(url, partition = null) {
   startBrowserViewInactivityTimer()
 }
 
-function closeEmbeddedBrowser() {
+export function closeEmbeddedBrowser() {
   stopBrowserViewInactivityTimer()
   if (!embeddedView || !launcherWin) return
   launcherWin.removeBrowserView(embeddedView)
@@ -539,21 +630,6 @@ export function forceGoHome() {
   closeEmbeddedBrowser()   // synchronous — removeBrowserView is sync in Electron
   if (launcherWin && !launcherWin.isDestroyed()) {
     launcherWin.webContents.send('launcher:go-home')
-  }
-}
-
-export function closeEmbeddedBrowserSilent() {
-  // Close BrowserView without sending launcher:go-home IPC
-  // Used when incoming call arrives to clear BrowserView layer
-  stopBrowserViewInactivityTimer()
-  if (!embeddedView || !launcherWin) return
-  launcherWin.removeBrowserView(embeddedView)
-  embeddedView.webContents.destroy()
-  embeddedView = null
-  setEmbeddedView(null)
-  // Notify renderer the browser closed (so view state syncs)
-  if (launcherWin && !launcherWin.isDestroyed()) {
-    launcherWin.webContents.send('launcher:browser-closed')
   }
 }
 

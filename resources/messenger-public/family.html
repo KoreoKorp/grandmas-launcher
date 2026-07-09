@@ -235,6 +235,66 @@
       padding: 18px 52px; font-size: 20px; font-weight: 700; cursor: pointer;
       z-index: 10; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
     }
+
+    /* ── Family Radio (send a voice note / photo) ────────────── */
+    #radio-btn {
+      background: rgba(255,255,255,0.15);
+      border: none;
+      border-radius: 50%;
+      width: 44px; height: 44px;
+      font-size: 20px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    #radio-btn:hover { background: rgba(255,255,255,0.28); }
+
+    #radio-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5);
+      align-items: center; justify-content: center;
+      z-index: 90;
+      padding: 20px;
+    }
+    .radio-card {
+      background: white; border-radius: 20px; padding: 28px;
+      width: 100%; max-width: 380px; text-align: center;
+    }
+    .radio-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    .radio-subtitle { font-size: 14px; color: var(--text-soft); margin-bottom: 20px; }
+    #record-btn {
+      width: 88px; height: 88px; border-radius: 50%;
+      background: var(--purple); color: white; border: none;
+      font-size: 32px; cursor: pointer; margin: 0 auto 12px;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    #record-btn.recording { background: #DC2626; animation: pulse 1.2s infinite; }
+    @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.4); } 50% { box-shadow: 0 0 0 12px rgba(220,38,38,0); } }
+    #record-status { font-size: 13px; color: var(--text-soft); min-height: 18px; margin-bottom: 16px; }
+    #radio-photo-input { display: none; }
+    .radio-photo-btn {
+      display: inline-block; padding: 10px 18px; border-radius: 20px;
+      border: 2px solid var(--border); font-size: 14px; font-weight: 600;
+      color: var(--text); cursor: pointer; margin-bottom: 16px;
+    }
+    #radio-photo-preview { max-width: 100%; max-height: 140px; border-radius: 10px; margin-bottom: 12px; display: none; }
+    #radio-caption {
+      width: 100%; border: 2px solid var(--border); border-radius: 12px;
+      padding: 10px 14px; font-size: 15px; font-family: inherit; resize: none;
+      margin-bottom: 16px; outline: none;
+    }
+    #radio-caption:focus { border-color: var(--purple); }
+    .radio-actions { display: flex; gap: 10px; }
+    .radio-actions button {
+      flex: 1; padding: 14px; border-radius: 14px; border: none;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+    }
+    #radio-cancel-btn { background: var(--bg); color: var(--text); }
+    #radio-send-btn { background: var(--purple); color: white; }
+    #radio-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    #radio-error { color: #DC2626; font-size: 13px; margin-bottom: 10px; min-height: 16px; }
   </style>
 </head>
 <body>
@@ -285,6 +345,7 @@
         <div class="header-sub" id="header-sub">Connecting…</div>
       </div>
     </div>
+    <button id="radio-btn" title="Send a voice note or photo">📻</button>
     <button id="call-btn" title="Video call Jean">📞</button>
   </div>
   <div id="messages-container">
@@ -303,6 +364,25 @@
   <video id="local-video"  autoplay playsinline muted></video>
   <div id="call-status-text">Calling Jean…</div>
   <button id="end-call-btn">End Call</button>
+</div>
+
+<!-- Family Radio: send a voice note / photo that plays gently on her screen -->
+<div id="radio-overlay">
+  <div class="radio-card">
+    <div class="radio-title">Send a little hello 💌</div>
+    <div class="radio-subtitle">A voice note or photo will appear gently on her screen — no need for her to check messages.</div>
+    <div id="radio-error"></div>
+    <button id="record-btn" title="Hold to record">🎙️</button>
+    <div id="record-status">Tap to record a short voice note (max 30s)</div>
+    <label class="radio-photo-btn" for="radio-photo-input">🖼️ Attach a photo</label>
+    <input type="file" id="radio-photo-input" accept="image/*">
+    <img id="radio-photo-preview">
+    <textarea id="radio-caption" placeholder="Add a short note (optional)" rows="2" maxlength="280"></textarea>
+    <div class="radio-actions">
+      <button id="radio-cancel-btn">Cancel</button>
+      <button id="radio-send-btn" disabled>Send</button>
+    </div>
+  </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -392,6 +472,7 @@ function clearPinError() {
 function startSocket(pin, token) {
   hide('loading-screen');
   socket = io({ reconnectionDelay: 3000 });
+  bindRadioResultHandler(socket);
 
   socket.on('connect', function() {
     socket.emit('family-connect', { roomId: identifier, pin: pin, token: token });
@@ -602,6 +683,101 @@ function flashCallBtn(msg) {
   btn.textContent = '⚠️';
   btn.title = msg;
   setTimeout(function() { btn.textContent = '📞'; btn.title = 'Video call Jean'; }, 4000);
+}
+
+// ── Family Radio (voice note / photo) ───────────────────────────
+var mediaRecorder = null, recordedChunks = [], audioDataUrl = null, photoDataUrl = null;
+var recordTimer = null, MAX_RECORD_MS = 30000;
+
+document.getElementById('radio-btn').addEventListener('click', function() {
+  resetRadioForm();
+  document.getElementById('radio-overlay').style.display = 'flex';
+});
+document.getElementById('radio-cancel-btn').addEventListener('click', closeRadioOverlay);
+
+function closeRadioOverlay() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+  document.getElementById('radio-overlay').style.display = 'none';
+}
+
+function resetRadioForm() {
+  audioDataUrl = null; photoDataUrl = null; recordedChunks = [];
+  document.getElementById('record-btn').classList.remove('recording');
+  document.getElementById('record-status').textContent = 'Tap to record a short voice note (max 30s)';
+  document.getElementById('radio-photo-preview').style.display = 'none';
+  document.getElementById('radio-photo-input').value = '';
+  document.getElementById('radio-caption').value = '';
+  document.getElementById('radio-error').textContent = '';
+  updateSendEnabled();
+}
+
+function updateSendEnabled() {
+  document.getElementById('radio-send-btn').disabled = !audioDataUrl && !photoDataUrl;
+}
+
+document.getElementById('record-btn').addEventListener('click', function() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(function(stream) {
+      recordedChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = function(e) { if (e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = function() {
+        stream.getTracks().forEach(function(t) { t.stop(); });
+        clearTimeout(recordTimer);
+        document.getElementById('record-btn').classList.remove('recording');
+        var blob = new Blob(recordedChunks, { type: 'audio/webm' });
+        var reader = new FileReader();
+        reader.onload = function() {
+          audioDataUrl = reader.result;
+          document.getElementById('record-status').textContent = 'Voice note recorded ✓';
+          updateSendEnabled();
+        };
+        reader.readAsDataURL(blob);
+      };
+      mediaRecorder.start();
+      document.getElementById('record-btn').classList.add('recording');
+      document.getElementById('record-status').textContent = 'Recording… tap again to stop';
+      recordTimer = setTimeout(function() { if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop(); }, MAX_RECORD_MS);
+    })
+    .catch(function() {
+      document.getElementById('radio-error').textContent = 'Microphone access denied.';
+    });
+});
+
+document.getElementById('radio-photo-input').addEventListener('change', function(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function() {
+    photoDataUrl = reader.result;
+    var preview = document.getElementById('radio-photo-preview');
+    preview.src = reader.result;
+    preview.style.display = 'block';
+    updateSendEnabled();
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('radio-send-btn').addEventListener('click', function() {
+  if (!socket) { document.getElementById('radio-error').textContent = 'Not connected — try again in a moment.'; return; }
+  document.getElementById('radio-send-btn').disabled = true;
+  var caption = document.getElementById('radio-caption').value.trim();
+  socket.emit('family-radio-upload', { audioDataUrl: audioDataUrl, photoDataUrl: photoDataUrl, caption: caption });
+});
+
+function bindRadioResultHandler(s) {
+  s.on('family-radio-upload-result', function(data) {
+    if (data.ok) {
+      closeRadioOverlay();
+    } else {
+      document.getElementById('radio-error').textContent = data.error || 'Could not send. Please try again.';
+      document.getElementById('radio-send-btn').disabled = false;
+    }
+  });
 }
 
 // ── Helpers ───────────────────────────────────────────────────

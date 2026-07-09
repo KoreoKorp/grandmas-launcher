@@ -6,3 +6,6 @@ out/
 *.log.worktrees/
 .worktrees/
 .worktrees/
+
+# Claude Octopus plugin local cache/state
+.claude-octopus/

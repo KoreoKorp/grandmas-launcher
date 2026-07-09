@@ -4,6 +4,7 @@ import { Server } from 'socket.io'
 import path       from 'path'
 import fs         from 'fs'
 import crypto     from 'crypto'
+import { isFamilyRadioEnabled } from './store.js'
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -11,10 +12,14 @@ function makeDataHelpers(dataDir) {
   const MESSAGES_DIR  = path.join(dataDir, 'messages')
   const CONTACTS_FILE = path.join(dataDir, 'contacts.json')
   const ALERTS_FILE   = path.join(dataDir, 'alerts.json')
+  const RADIO_DIR      = path.join(dataDir, 'family-radio')
+  const RADIO_FILE     = path.join(dataDir, 'family-radio.json')
 
   fs.mkdirSync(MESSAGES_DIR, { recursive: true })
+  fs.mkdirSync(RADIO_DIR, { recursive: true })
   if (!fs.existsSync(CONTACTS_FILE)) fs.writeFileSync(CONTACTS_FILE, '[]')
   if (!fs.existsSync(ALERTS_FILE))   fs.writeFileSync(ALERTS_FILE,   '[]')
+  if (!fs.existsSync(RADIO_FILE))    fs.writeFileSync(RADIO_FILE,    '[]')
 
   function getContacts() {
     try { return JSON.parse(fs.readFileSync(CONTACTS_FILE, 'utf8')) } catch { return [] }
@@ -57,7 +62,56 @@ function makeDataHelpers(dataDir) {
     return alert
   }
 
-  return { getContacts, saveContacts, findContact, getMessages, saveMessage, markRoomAsRead, getAlerts, saveAlerts, addAlert }
+  function getRadioClips() {
+    try { return JSON.parse(fs.readFileSync(RADIO_FILE, 'utf8')) } catch { return [] }
+  }
+  function saveRadioClips(clips) { fs.writeFileSync(RADIO_FILE, JSON.stringify(clips, null, 2)) }
+  // Best-effort delete of a clip's media files. Never throws — a failed cleanup
+  // must not break the upload/played paths. ENOENT (already gone) is silent.
+  function unlinkClipFiles(clip) {
+    if (!clip) return
+    for (const file of [clip.audioFile, clip.photoFile]) {
+      if (!file) continue
+      fs.unlink(path.join(RADIO_DIR, file), err => {
+        if (err && err.code !== 'ENOENT') console.error('[messenger] Failed to delete radio media:', err.message)
+      })
+    }
+  }
+  const MAX_RADIO_CLIPS = 50
+  function addRadioClip(data) {
+    const clip = { id: crypto.randomBytes(6).toString('hex'), createdAt: new Date().toISOString(), playedAt: null, ...data }
+    const clips = getRadioClips()
+    clips.push(clip)
+    // Ambient stream, not an archive — cap stored clips. But never silently drop
+    // a clip the senior hasn't seen: keep ALL unplayed clips, plus the most
+    // recent played ones up to the cap. Delete media files of anything dropped
+    // so RADIO_DIR (up to ~8MB per part) can't grow unbounded.
+    let kept = clips
+    if (clips.length > MAX_RADIO_CLIPS) {
+      const unplayed = clips.filter(c => !c.playedAt)
+      const played   = clips.filter(c => c.playedAt)
+      const keepPlayedCount = Math.max(0, MAX_RADIO_CLIPS - unplayed.length)
+      const keepPlayed = keepPlayedCount > 0 ? played.slice(-keepPlayedCount) : []
+      const keptIds = new Set([...unplayed, ...keepPlayed].map(c => c.id))
+      kept = clips.filter(c => keptIds.has(c.id))              // preserve chronological order
+      clips.filter(c => !keptIds.has(c.id)).forEach(unlinkClipFiles)
+    }
+    saveRadioClips(kept)
+    return clip
+  }
+  function markRadioClipPlayed(id) {
+    const clips = getRadioClips()
+    const clip  = clips.find(c => c.id === id)
+    // Once played the clip never re-enters the queue, so its media is dead
+    // weight — reclaim the disk immediately.
+    if (clip && !clip.playedAt) unlinkClipFiles(clip)
+    saveRadioClips(clips.map(c => c.id === id ? { ...c, playedAt: new Date().toISOString() } : c))
+  }
+
+  return {
+    getContacts, saveContacts, findContact, getMessages, saveMessage, markRoomAsRead, getAlerts, saveAlerts, addAlert,
+    getRadioClips, saveRadioClips, addRadioClip, markRadioClipPlayed, RADIO_DIR
+  }
 }
 
 // ── Main export ───────────────────────────────────────────────
@@ -157,7 +211,10 @@ export async function startServer(config) {
   // ── Express + Socket.IO ────────────────────────────────────
   const expressApp = express()
   const httpServer = http.createServer(expressApp)
-  const io         = new Server(httpServer, { cors: { origin: '*' } })
+  // Raised from the 1MB default so a voice note + photo pair can travel over
+  // the same authenticated socket used for chat, instead of a separate REST
+  // upload path that would need its own auth (see family-radio-upload below).
+  const io = new Server(httpServer, { cors: { origin: '*' }, maxHttpBufferSize: 20 * 1024 * 1024 })
 
   expressApp.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -168,10 +225,31 @@ export async function startServer(config) {
   })
   expressApp.use(express.json())
   expressApp.use(express.static(publicDir))
+  // Family Radio media is private. The launcher displays it via <img>/<audio>,
+  // which cannot send an auth header, so a header-token gate would break the
+  // launcher too. Instead restrict this route to loopback: the launcher fetches
+  // these URLs from http://localhost:<port> (same origin as its config URL),
+  // while family devices reach the server over its LAN IP and are senders, not
+  // viewers — they never need to read the media back.
+  const LOOPBACK_ADDRS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
+  expressApp.use('/family-radio-media', (req, res, next) => {
+    const ip = req.socket?.remoteAddress || ''
+    if (!LOOPBACK_ADDRS.has(ip)) return res.status(403).json({ error: 'Forbidden' })
+    next()
+  }, express.static(db.RADIO_DIR))
 
   function requireAdmin(req, res, next) {
     const key = req.headers['x-admin-key']
     if (!key || key !== adminPassword) return res.status(401).json({ error: 'Unauthorized' })
+    next()
+  }
+
+  // Launcher runs in the same process as this server but talks to it over
+  // HTTP like any other client — gate with the same authToken used for its
+  // socket.io registration so no other LAN device can read/ack the queue.
+  function requireLauncher(req, res, next) {
+    const token = req.headers['x-launcher-token']
+    if (!launcherAuthToken || token !== launcherAuthToken) return res.status(401).json({ error: 'Unauthorized' })
     next()
   }
 
@@ -246,6 +324,68 @@ export async function startServer(config) {
   expressApp.delete('/api/alerts/:id', requireAdmin, (req, res) => {
     db.saveAlerts(db.getAlerts().filter(a => a.id !== req.params.id))
     res.json({ success: true })
+  })
+
+  // ── Family Radio ───────────────────────────────────────────
+  // Passive, zero-navigation ambient stream: family/Jean send a short voice
+  // note and/or a photo, the launcher surfaces it on the idle home screen
+  // without the senior having to open Messages and pick a contact.
+
+  const MAX_CLIP_BYTES = 8 * 1024 * 1024 // ~8MB decoded, per audio or photo
+
+  function decodeDataUrl(dataUrl) {
+    // Accepts "data:<mime>;base64,<data>" — returns { buffer, ext } or null.
+    const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl || '')
+    if (!match) return null
+    const buffer = Buffer.from(match[2], 'base64')
+    if (buffer.length === 0 || buffer.length > MAX_CLIP_BYTES) return null
+    const ext = (match[1].split('/')[1] || 'bin').replace(/[^a-z0-9]/gi, '').slice(0, 8)
+    return { buffer, ext }
+  }
+
+  function saveRadioUpload(senderName, { audioDataUrl, photoDataUrl, caption }) {
+    if (!audioDataUrl && !photoDataUrl) return { error: 'Include a voice note or a photo' }
+
+    const id = crypto.randomBytes(6).toString('hex')
+    let audioFile = null
+    let photoFile = null
+
+    if (audioDataUrl) {
+      const decoded = decodeDataUrl(audioDataUrl)
+      if (!decoded) return { error: 'Voice note is invalid or too large' }
+      audioFile = `${id}-audio.${decoded.ext}`
+      fs.writeFileSync(path.join(db.RADIO_DIR, audioFile), decoded.buffer)
+    }
+    if (photoDataUrl) {
+      const decoded = decodeDataUrl(photoDataUrl)
+      if (!decoded) return { error: 'Photo is invalid or too large' }
+      photoFile = `${id}-photo.${decoded.ext}`
+      fs.writeFileSync(path.join(db.RADIO_DIR, photoFile), decoded.buffer)
+    }
+
+    const clip = db.addRadioClip({ id, from: senderName, audioFile, photoFile, caption: (caption || '').slice(0, 280) })
+    return {
+      clip: {
+        ...clip,
+        audioUrl: audioFile ? `/family-radio-media/${audioFile}` : null,
+        photoUrl: photoFile ? `/family-radio-media/${photoFile}` : null
+      }
+    }
+  }
+
+  expressApp.get('/api/family-radio/queue', requireLauncher, (req, res) => {
+    if (!isFamilyRadioEnabled()) return res.json([])
+    const unplayed = db.getRadioClips().filter(c => !c.playedAt)
+    res.json(unplayed.map(c => ({
+      ...c,
+      audioUrl: c.audioFile ? `/family-radio-media/${c.audioFile}` : null,
+      photoUrl: c.photoFile ? `/family-radio-media/${c.photoFile}` : null
+    })))
+  })
+
+  expressApp.post('/api/family-radio/:id/played', requireLauncher, (req, res) => {
+    db.markRadioClipPlayed(req.params.id)
+    res.json({ ok: true })
   })
 
   // ── TURN credentials ───────────────────────────────────────
@@ -416,6 +556,19 @@ export async function startServer(config) {
       db.saveMessage(socket.roomId, message)
       if (jeanSocket) jeanSocket.emit('new-message', { roomId: socket.roomId, message })
       socket.emit('message-sent', message)
+    })
+
+    socket.on('family-radio-upload', (payload) => {
+      if (!socket.isJean && !socket.roomId) return
+      if (!isFamilyRadioEnabled()) {
+        socket.emit('family-radio-upload-result', { ok: false, error: 'Family Radio is turned off right now.' })
+        return
+      }
+      const senderName = socket.isJean ? 'Jean' : socket.contact.name
+      const result = saveRadioUpload(senderName, payload || {})
+      if (result.error) { socket.emit('family-radio-upload-result', { ok: false, error: result.error }); return }
+      if (launcherSocket) launcherSocket.emit('family-radio-new', result.clip)
+      socket.emit('family-radio-upload-result', { ok: true })
     })
 
     socket.on('jean-open-room', ({ roomId }) => {
