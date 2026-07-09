@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('launcher', {
   getMusic: () => ipcRenderer.invoke('launcher:get-music'),
   getLocalGames: () => ipcRenderer.invoke('launcher:get-local-games'),
   getLocalPhotos: () => ipcRenderer.invoke('launcher:get-local-photos'),
+  getFamilyRadioQueue: () => ipcRenderer.invoke('launcher:get-family-radio-queue'),
+  markFamilyRadioPlayed: (id) => ipcRenderer.invoke('launcher:mark-family-radio-played', { id }),
 
   onWeatherUpdated: (cb) => {
     const h = (_, data) => cb(data)
@@ -54,6 +56,11 @@ contextBridge.exposeInMainWorld('launcher', {
     const h = () => cb()
     ipcRenderer.on('launcher:browser-loaded', h)
     return () => ipcRenderer.removeListener('launcher:browser-loaded', h)
+  },
+  onFamilyRadioNew: (cb) => {
+    const h = (_, data) => cb(data)
+    ipcRenderer.on('launcher:family-radio-new', h)
+    return () => ipcRenderer.removeListener('launcher:family-radio-new', h)
   },
 
   // WebRTC signaling relay

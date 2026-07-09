@@ -65,6 +65,9 @@ const defaults = {
     albumUrl: '',
     localPath: ''
   },
+  familyRadio: {
+    enabled: true
+  },
   userName: 'Grandma',
   activityLog: [],
   remoteConfig: {
@@ -146,6 +149,14 @@ if (!weather.locations) {
     ? [{ id: crypto.randomUUID(), name: weather.location }]
     : []
   store.set('weather.locations', locations)
+}
+
+// Family Radio ambient stream can be turned off by the caregiver. Default on
+// (setting !== false) so a missing/legacy config still surfaces clips — matches
+// the renderer's `config.familyRadio?.enabled !== false` check. Read live so the
+// embedded server honours a toggle without a restart.
+export function isFamilyRadioEnabled() {
+  return store.get('familyRadio.enabled') !== false
 }
 
 export function logActivity(type, detail = '') {
