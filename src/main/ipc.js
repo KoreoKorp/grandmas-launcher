@@ -593,6 +593,13 @@ function openEmbeddedBrowser(url, partition = null) {
   if (partition) webPreferences.partition = partition
 
   const view = new BrowserView({ webPreferences })
+  // A BrowserView paints transparent by default, so any page that does not set
+  // its own opaque background lets the launcher's forest-green shell show
+  // through behind the text — which is unreadable, and is what a real browser
+  // would never do. Mental Floss is one such site (<body> carries no background
+  // at all), but the problem is general, so fix it for every embedded site
+  // rather than per-site. White is what a browser uses for the same case.
+  view.setBackgroundColor('#ffffff')
   enableAdBlockingFor(view.webContents.session)
   launcherWin.addBrowserView(view)
   embeddedView = view
