@@ -18,26 +18,35 @@ const PINTEREST_AD_CSS = `
 // The Ghostery engine (adBlocker.js) already blocks the ad *requests* on every
 // embedded site, but the page still reserves the layout space — Mental Floss is
 // ad-dense enough that the leftovers read as big blank gaps mid-article, and the
-// sticky bottom rail covers the Back button. Collapse the empty slots and kill
-// the newsletter/consent overlays so an article is just the article.
+// sticky bottom rail covers the Back button. Collapse the empty slots and hide
+// the consent banner so an article is just the article.
+//
+// Selectors are the site's own slot ids, read off the served markup: Mental
+// Floss declares them in a `var placeholders = {...}` block and hands them to
+// Minute Media's `injectAdPlaceholders`, so one set covers the whole site. It
+// uses no ad-related class names at all, hence ids only.
 const MENTALFLOSS_AD_CSS = `
-  [id^="div-gpt-ad"], [id^="google_ads_"], iframe[id^="google_ads_iframe"],
-  [class*="ad-slot"], [class*="adSlot"], [class*="ad-unit"], [class*="adUnit"],
-  [class*="ad-container"], [class*="adContainer"], [data-testid*="ad-"],
-  [aria-label="advertisement"], [aria-label="Advertisement"],
-  ins.adsbygoogle { display: none !important; }
+  /* Server-rendered containers. These carry explicit heights (min-h-[280px],
+     h-[50px]) so a blocked ad leaves the reserved gap behind, not nothing. */
+  [id^="static-ad-placeholder"], [id^="static-top-ad-placeholder"],
 
-  /* Sticky rails and interstitials — these overlay the page rather than
-     reserving space, so they survive the request-level block entirely. */
-  [class*="sticky-ad"], [class*="stickyAd"], [class*="anchor-ad"],
-  [class*="interstitial"], [class*="newsletter-modal"], [class*="newsletterModal"],
-  [id*="onetrust-banner"], #onetrust-consent-sdk { display: none !important; }
+  /* Slots injected at runtime from the placeholders config. */
+  [id^="div-gpt-ad"], [id^="div-sideBar"],
+  #below-top-section, #below-second-section,
 
-  /* Consent/newsletter SDKs lock page scrolling via a class on <body> when they
-     open. We hide the modal itself above, but the lock is set by JS and would
-     otherwise persist — leaving her on a page that will not scroll. */
-  body.ot-overflow-hidden, body[class*="no-scroll"], body[class*="noScroll"],
-  body[class*="modal-open"] { overflow: auto !important; }
+  /* Anchored bottom rail — overlays the page rather than reserving space, so
+     the request-level block never removes it, and it sits over the Back
+     button at the bottom of the view. */
+  #div-sticky-bottom { display: none !important; }
+
+  /* OneTrust consent banner (injected at runtime) and its footer link. */
+  #onetrust-consent-sdk, [id^="onetrust-banner"],
+  .ot-sdk-show-settings { display: none !important; }
+
+  /* OneTrust locks page scrolling on <body> while its dialog is open. Hiding
+     the dialog above leaves the lock set by JS, which would strand her on a
+     page that will not scroll. */
+  body.ot-overflow-hidden { overflow: auto !important; }
 `
 
 let launcherWin = null
