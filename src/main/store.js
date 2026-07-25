@@ -7,6 +7,8 @@ const defaults = {
     { id: 'pinterest', type: 'web',      icon: '📌',  label: 'Pinterest', target: 'https://pinterest.com',        kiosk: false },
     { id: 'youtube',   type: 'web',      icon: '▶️',  label: 'YouTube',  target: 'https://www.youtube.com',       kiosk: false },
     { id: 'bermuda-news', type: 'web',   icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0OCIgZmlsbD0iIzJFODZBQiIvPgogIDxwYXRoIGQ9IgogICAgTSAzMCAyOAogICAgQyA0MCAyNCwgNTUgMjYsIDYyIDMyCiAgICBDIDY4IDM3LCA3MCA0NCwgNjYgNDkKICAgIEMgNzQgNTIsIDgwIDU4LCA3OCA2NAogICAgQyA3NiA3MCwgNjggNzIsIDYwIDcwCiAgICBDIDUyIDY4LCA0OCA2MiwgNTAgNTYKICAgIEMgNDQgNjAsIDM2IDYyLCAzMCA1OAogICAgQyAyNCA1NCwgMjQgNDYsIDMwIDQyCiAgICBDIDI0IDQwLCAyMCAzNCwgMjQgMzAKICAgIEMgMjYgMjcsIDI4IDI3LCAzMCAyOAogICAgWiIKICAgIGZpbGw9IiM0Q0FGNTAiIHN0cm9rZT0iIzJFN0QzMiIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KPC9zdmc+Cg==', label: 'Bermuda News', target: 'https://www.royalgazette.com/', kiosk: false },
+    { id: 'sixty-and-me', type: 'web',   icon: '🌸',  label: 'Sixty and Me', target: 'https://sixtyandme.com/', kiosk: false },
+    { id: 'mental-floss', type: 'web',   icon: '🧠',  label: 'Mental Floss', target: 'https://www.mentalfloss.com/', kiosk: false },
     { id: 'photos',    type: 'built-in', icon: '🖼️',  label: 'Photos',   target: 'photos' },
     { id: 'games',     type: 'built-in', icon: '🎮',  label: 'Games',    target: 'games' },
     { id: 'weather',   type: 'built-in', icon: '🌤️', label: 'Weather',  target: 'weather' },
@@ -197,6 +199,35 @@ if (!store.get('migrations.aiTileAdded')) {
     store.set('tiles', [...currentTiles, { id: 'ai-helper', type: 'built-in', icon: '🤖', label: 'Ask AI', target: 'ai-helper' }])
   }
   store.set('migrations.aiTileAdded', true)
+}
+
+// Insert a tile just before the first built-in tile (Photos) so tiles migrated
+// onto existing installs land in the same spot as on fresh installs, instead of
+// being appended after everything. Falls back to appending if Photos is gone.
+function insertTileBeforePhotos(tiles, tile) {
+  const idx = tiles.findIndex(t => t.id === 'photos')
+  return idx === -1
+    ? [...tiles, tile]
+    : [...tiles.slice(0, idx), tile, ...tiles.slice(idx)]
+}
+
+// One-time migrations: add web tiles that shipped after the initial defaults to
+// existing installs (defaults only cover fresh installs). Each is skipped on
+// subsequent launches so a caregiver can remove the tile without it reappearing.
+// Tile definitions are sourced from `defaults.tiles` to avoid duplication.
+// Bermuda News runs before Sixty and Me so their relative order matches defaults.
+for (const [tileId, migrationFlag] of [
+  ['bermuda-news',  'bermudaNewsTileAdded'],
+  ['sixty-and-me',  'sixtyAndMeTileAdded'],
+  ['mental-floss',  'mentalFlossTileAdded']
+]) {
+  if (store.get(`migrations.${migrationFlag}`)) continue
+  const currentTiles = store.get('tiles')
+  if (!currentTiles.find(t => t.id === tileId)) {
+    const tile = defaults.tiles.find(t => t.id === tileId)
+    if (tile) store.set('tiles', insertTileBeforePhotos(currentTiles, { ...tile }))
+  }
+  store.set(`migrations.${migrationFlag}`, true)
 }
 
 // Family Radio ambient stream can be turned off by the caregiver. Default on

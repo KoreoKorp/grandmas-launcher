@@ -15,6 +15,31 @@ const PINTEREST_AD_CSS = `
   .fullPageSignupModal, [data-test-id="header-signup"] { display: none !important; }
 `
 
+// The Ghostery engine (adBlocker.js) already blocks the ad *requests* on every
+// embedded site, but the page still reserves the layout space — Mental Floss is
+// ad-dense enough that the leftovers read as big blank gaps mid-article, and the
+// sticky bottom rail covers the Back button. Collapse the empty slots and kill
+// the newsletter/consent overlays so an article is just the article.
+const MENTALFLOSS_AD_CSS = `
+  [id^="div-gpt-ad"], [id^="google_ads_"], iframe[id^="google_ads_iframe"],
+  [class*="ad-slot"], [class*="adSlot"], [class*="ad-unit"], [class*="adUnit"],
+  [class*="ad-container"], [class*="adContainer"], [data-testid*="ad-"],
+  [aria-label="advertisement"], [aria-label="Advertisement"],
+  ins.adsbygoogle { display: none !important; }
+
+  /* Sticky rails and interstitials — these overlay the page rather than
+     reserving space, so they survive the request-level block entirely. */
+  [class*="sticky-ad"], [class*="stickyAd"], [class*="anchor-ad"],
+  [class*="interstitial"], [class*="newsletter-modal"], [class*="newsletterModal"],
+  [id*="onetrust-banner"], #onetrust-consent-sdk { display: none !important; }
+
+  /* Consent/newsletter SDKs lock page scrolling via a class on <body> when they
+     open. We hide the modal itself above, but the lock is set by JS and would
+     otherwise persist — leaving her on a page that will not scroll. */
+  body.ot-overflow-hidden, body[class*="no-scroll"], body[class*="noScroll"],
+  body[class*="modal-open"] { overflow: auto !important; }
+`
+
 let launcherWin = null
 let adminWin = null
 let embeddedView = null // BrowserView for embedded websites
@@ -602,6 +627,9 @@ function openEmbeddedBrowser(url, partition = null) {
     const currentUrl = view.webContents.getURL()
     if (currentUrl.includes('pinterest.com')) {
       view.webContents.insertCSS(PINTEREST_AD_CSS).catch(() => {})
+    }
+    if (currentUrl.includes('mentalfloss.com')) {
+      view.webContents.insertCSS(MENTALFLOSS_AD_CSS).catch(() => {})
     }
   })
 
