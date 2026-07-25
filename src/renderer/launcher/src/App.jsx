@@ -130,6 +130,26 @@ export default function App() {
     return () => { cleanupOpen(); cleanupClose(); cleanupLoaded() }
   }, [])
 
+  // Keyboard shortcuts for the Back and Home buttons. These fire while the
+  // launcher renderer holds focus (home screen + built-in views). When a website
+  // is open the BrowserView has focus instead, so the same Alt+Left / Alt+Down
+  // shortcuts are handled in the main process (see openEmbeddedBrowser in ipc.js).
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!e.altKey) return
+      if (e.key === 'ArrowLeft') {          // Back
+        e.preventDefault()
+        if (view === 'browser') window.launcher.browserBack()
+        else if (view !== 'home') goHome()
+      } else if (e.key === 'ArrowDown') {   // Home
+        e.preventDefault()
+        goHome()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [view])
+
   // Network offline tile shift seamlessly
   useEffect(() => {
     const cleanup = window.launcher.onNetworkStatus(({ isOnline: networkOnline }) => {

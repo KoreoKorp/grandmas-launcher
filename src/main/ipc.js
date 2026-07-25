@@ -116,17 +116,7 @@ export function registerIPC() {
   })
 
   ipcMain.on('launcher:browser-back', () => {
-    if (embeddedView) {
-      if (embeddedView.webContents.canGoBack()) {
-        embeddedView.webContents.goBack()
-      } else {
-        // Nothing to go back to (SPA or first page) — close browser and go home
-        closeEmbeddedBrowser()
-        if (launcherWin && !launcherWin.isDestroyed()) {
-          launcherWin.webContents.send('launcher:go-home')
-        }
-      }
-    }
+    browserGoBack()
   })
 
   ipcMain.on('launcher:set-browser-nav-width', (event, navWidthPx) => {
@@ -635,6 +625,23 @@ function openEmbeddedBrowser(url, partition = null) {
     }
   })
 
+  // Keyboard shortcuts for the Back and Home buttons. While Jean is on a
+  // website the BrowserView holds keyboard focus, so the launcher renderer never
+  // sees these keys — they must be intercepted here in the main process.
+  //   Alt+Left  → Back  (same as the on-screen Back button; overrides Chromium's
+  //               built-in Alt+Left so "no history" still closes + goes home)
+  //   Alt+Down  → Home  (same as the on-screen Home button)
+  view.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !input.alt) return
+    if (input.key === 'ArrowLeft') {
+      event.preventDefault()
+      browserGoBack()
+    } else if (input.key === 'ArrowDown') {
+      event.preventDefault()
+      forceGoHome()
+    }
+  })
+
   // Signal renderer on every page load and inject site-specific CSS
   view.webContents.on('did-finish-load', () => {
     if (launcherWin && !launcherWin.isDestroyed()) {
@@ -655,6 +662,22 @@ function openEmbeddedBrowser(url, partition = null) {
   // Start inactivity watch
   lastBrowserActivity = Date.now()
   startBrowserViewInactivityTimer()
+}
+
+// Back button / Alt+Left: step back through the page's history, or if there is
+// nowhere left to go (SPA or the first page) close the browser and return to the
+// home screen. Shared by the on-screen Back button (via IPC) and the keyboard
+// shortcut intercepted on the BrowserView in openEmbeddedBrowser().
+function browserGoBack() {
+  if (!embeddedView) return
+  if (embeddedView.webContents.canGoBack()) {
+    embeddedView.webContents.goBack()
+  } else {
+    closeEmbeddedBrowser()
+    if (launcherWin && !launcherWin.isDestroyed()) {
+      launcherWin.webContents.send('launcher:go-home')
+    }
+  }
 }
 
 export function closeEmbeddedBrowser() {
