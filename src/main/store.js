@@ -65,7 +65,9 @@ const defaults = {
   },
   ai: {
     openrouterKey: '',
-    model: 'poolside/laguna-m.1:free'
+    openaiKey: '',
+    model: 'gpt-4o-mini',
+    buddyHistory: []
   },
   photos: {
     albumUrl: '',

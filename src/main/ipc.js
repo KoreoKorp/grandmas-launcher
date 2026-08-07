@@ -213,41 +213,87 @@ export function registerIPC() {
     }
   })
 
+  // ── AI Buddy ──────────────────────────────────────────────────────────────
+  // Persisted conversation history (last 30 messages for context window management)
+  function getAIHistory() { return store.get('ai.buddyHistory') || [] }
+  function setAIHistory(msgs) {
+    const trimmed = msgs.slice(-30)
+    store.set('ai.buddyHistory', trimmed)
+  }
+
   ipcMain.handle('launcher:ask-ai', async (event, { message }) => {
-    const apiKey = store.get('ai.openrouterKey') || process.env.OPENROUTER_API_KEY
+    const apiKey = store.get('ai.openaiKey') || process.env.OPENAI_API_KEY
     if (!apiKey) return { error: 'no-key' }
-    const model = store.get('ai.model') || 'poolside/laguna-m.1:free'
+    const model = store.get('ai.model') || 'gpt-4o-mini'
     const userName = store.get('userName') || 'Grandma'
+    const tiles = store.get('tiles') || []
+
+    // Build tile context so the AI can reference available apps
+    const tileNames = tiles.map(t => t.label).filter(Boolean).join(', ')
+
+    const systemPrompt = `You are Buddy, a warm, patient, and cheerful AI companion inside a computer launcher made for ${userName}, an elderly woman. You have TWO roles:
+
+1. COMPUTER HELPER: Help ${userName} use the computer. She can open apps by tapping tiles on the home screen. Available apps/tiles: ${tileNames}. Guide her step-by-step with simple instructions. If she wants to open something, tell her exactly which tile to tap.
+
+2. COMPANION: Chat warmly, tell jokes, share fun facts, talk about her day, and keep her company. Be friendly like a grandchild would be.
+
+RULES:
+- Keep responses SHORT (2-3 sentences max for voice readability)
+- Use simple, plain language — NO technical jargon
+- Be warm, encouraging, and patient
+- If ${userName} seems confused or frustrated, be extra gentle and reassuring
+- You can suggest actions like opening a specific app by mentioning the tile name
+- Always end with a helpful suggestion or warm question if appropriate
+- Use the person's name naturally
+- NEVER mention you are an AI, a model, or anything technical`
+
+    const history = getAIHistory()
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...history,
+      { role: 'user', content: message }
+    ]
+
     try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'grandmas-launcher',
-          'X-Title': "Grandma's Launcher"
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           model,
-          messages: [
-            { role: 'system', content: `You are a warm, patient helper for an elderly person named ${userName}. Keep responses to 2–3 short sentences. Use plain, friendly language. No technical jargon.` },
-            { role: 'user', content: message }
-          ],
-          max_tokens: 250,
-          // laguna-m.1 is a reasoning model; without this it spends the entire
-          // token budget "thinking" and returns null content. Disable reasoning
-          // so short helper answers land in message.content.
-          reasoning: { enabled: false }
+          messages,
+          max_tokens: 300,
+          temperature: 0.85
         })
       })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        return { error: errData?.error?.message || `API error ${res.status}` }
+      }
       const data = await res.json()
       const reply = data.choices?.[0]?.message?.content
       if (!reply) return { error: 'empty-response' }
+
+      // Persist conversation
+      const updated = [...history, { role: 'user', content: message }, { role: 'assistant', content: reply }]
+      setAIHistory(updated)
+
       return { reply }
     } catch (err) {
       console.error('[ask-ai] error:', err)
       return { error: err.message }
     }
+  })
+
+  ipcMain.handle('launcher:clear-ai-history', () => {
+    store.set('ai.buddyHistory', [])
+    return { ok: true }
+  })
+
+  ipcMain.handle('launcher:get-ai-history', () => {
+    return getAIHistory()
   })
 
   ipcMain.handle('launcher:get-family-radio-queue', async () => {
