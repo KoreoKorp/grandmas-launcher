@@ -67,7 +67,8 @@ const defaults = {
   },
   ai: {
     openrouterKey: '',
-    model: 'poolside/laguna-m.1:free'
+    model: 'google/gemini-2.0-flash-001',
+    buddyHistory: []
   },
   photos: {
     albumUrl: '',
