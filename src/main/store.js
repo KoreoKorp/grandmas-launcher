@@ -65,8 +65,7 @@ const defaults = {
   },
   ai: {
     openrouterKey: '',
-    openaiKey: '',
-    model: 'gpt-4o-mini',
+    model: 'google/gemini-2.0-flash-001',
     buddyHistory: []
   },
   photos: {

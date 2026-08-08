@@ -222,13 +222,12 @@ export function registerIPC() {
   }
 
   ipcMain.handle('launcher:ask-ai', async (event, { message }) => {
-    const apiKey = store.get('ai.openaiKey') || process.env.OPENAI_API_KEY
+    const apiKey = store.get('ai.openrouterKey') || process.env.OPENROUTER_API_KEY
     if (!apiKey) return { error: 'no-key' }
-    const model = store.get('ai.model') || 'gpt-4o-mini'
+    const model = store.get('ai.model') || 'google/gemini-2.0-flash-001'
     const userName = store.get('userName') || 'Grandma'
     const tiles = store.get('tiles') || []
 
-    // Build tile context so the AI can reference available apps
     const tileNames = tiles.map(t => t.label).filter(Boolean).join(', ')
 
     const systemPrompt = `You are Buddy, a warm, patient, and cheerful AI companion inside a computer launcher made for ${userName}, an elderly woman. You have TWO roles:
@@ -255,11 +254,13 @@ RULES:
     ]
 
     try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'grandmas-launcher',
+          'X-Title': "Grandma's Launcher"
         },
         body: JSON.stringify({
           model,
@@ -276,7 +277,6 @@ RULES:
       const reply = data.choices?.[0]?.message?.content
       if (!reply) return { error: 'empty-response' }
 
-      // Persist conversation
       const updated = [...history, { role: 'user', content: message }, { role: 'assistant', content: reply }]
       setAIHistory(updated)
 

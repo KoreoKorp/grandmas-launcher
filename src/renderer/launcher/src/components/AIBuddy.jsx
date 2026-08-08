@@ -117,7 +117,7 @@ export default function AIBuddy({ onClose, onTileOpen, tiles = [] }) {
     setLoading(false)
 
     if (result.error === 'no-key') {
-      const errMsg = { role: 'assistant', content: "Oh dear, I'm not set up yet! Ask a family member to add an OpenAI key in the Admin Panel. Then I can help you!", timestamp: Date.now() }
+      const errMsg = { role: 'assistant', content: "Oh dear, I'm not set up yet! Ask a family member to add an OpenRouter API key in the Admin Panel. Then I can help you!", timestamp: Date.now() }
       setMessages(prev => [...prev, errMsg])
       setBuddyState('idle')
       if (autoSpeak) speak(errMsg.content)
