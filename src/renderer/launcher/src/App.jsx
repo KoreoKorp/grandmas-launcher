@@ -13,7 +13,6 @@ import IncomingCallOverlay from './components/IncomingCallOverlay'
 import VideoCallOverlay from './components/VideoCallOverlay'
 import AudioPlayer from './components/AudioPlayer'
 import DailyCheckin from './components/DailyCheckin'
-import AIHelper from './components/AIHelper'
 import AIBuddy from './components/AIBuddy'
 import BuddyFloat from './components/BuddyFloat'
 import PhotoScreensaver from './components/PhotoScreensaver'
@@ -30,7 +29,6 @@ export default function App() {
   const [browserLoaded, setBrowserLoaded] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
   const [showCheckin, setShowCheckin] = useState(false)
-  const [showAIHelper, setShowAIHelper] = useState(false)
   const [showAIBuddy, setShowAIBuddy] = useState(false)
   const [missedCalls, setMissedCalls] = useState(0)
   const [showScreensaver, setShowScreensaver] = useState(false)

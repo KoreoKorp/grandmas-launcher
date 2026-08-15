@@ -19,19 +19,28 @@ export default function PhotosView({ photosConfig, onBack }) {
     window.launcher.getLocalPhotos().then(photos => {
       if (cancelled) return
       setLocalPhotos(photos)
-      // Fetch thumbnails one at a time and paint each as it arrives, rather than
-      // waiting on every photo before showing any — with hundreds of photos,
-      // batching them all into one Promise.all left the grid blank for a long
-      // stretch and then popped every image in at once, which is what produced
-      // the "overlapping" glitch during that mass-mount reflow.
-      photos.forEach(p => {
-        window.launcher.getPhotoThumbnail(p.path).then(url => {
-          // She can back out to the home screen while hundreds of thumbnails
-          // are still loading — without this guard, every one of those
-          // in-flight IPC calls would still land a setState after unmount.
+
+      // Paint each thumbnail as it arrives rather than waiting on every one
+      // first, but cap how many native thumbnail requests
+      // (nativeImage.createThumbnailFromPath, backed by the Windows Shell)
+      // are in flight at once instead of firing all of them simultaneously —
+      // a folder can have hundreds of photos, and there's no reason to
+      // hammer the Shell with that many concurrent calls.
+      const CONCURRENCY = 4
+      let nextIndex = 0
+      async function worker() {
+        while (!cancelled) {
+          const i = nextIndex++
+          if (i >= photos.length) return
+          const p = photos[i]
+          const url = await window.launcher.getPhotoThumbnail(p.path)
+          // She can back out to the home screen while thumbnails are still
+          // loading — without this guard, in-flight IPC calls would still
+          // land a setState after unmount.
           if (!cancelled && url) setThumbs(prev => ({ ...prev, [p.path]: url }))
-        })
-      })
+        }
+      }
+      for (let w = 0; w < CONCURRENCY; w++) worker()
     })
     return () => { cancelled = true }
   }, [])
@@ -301,7 +310,6 @@ const S = {
     flexDirection: 'column',
     border: '2px solid var(--border)',
     borderRadius: 'var(--radius-sm)',
-    overflow: 'hidden',
     cursor: 'pointer',
     background: 'var(--bg-card)',
     padding: 0,
@@ -309,18 +317,30 @@ const S = {
   },
   thumbFrame: {
     width: '100%',
-    aspectRatio: '1',
+    // padding-top percentage trick for a 1:1 frame. overflow:hidden lives
+    // here (not on photoCard) — as a grid item that's also a flex column
+    // with overflow:hidden, photoCard's own auto-height computation doesn't
+    // pick up a percentage/aspect-ratio-driven child height at all (collapses
+    // to ~3px regardless of which sizing technique the child uses, both
+    // aspect-ratio and this padding trick reproduced it identically). Keeping
+    // the clipping on this inner frame instead sidesteps that computation.
+    paddingTop: '100%',
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 'var(--radius-sm)',
     flexShrink: 0
   },
   thumb: {
+    position: 'absolute',
+    inset: 0,
     width: '100%',
     height: '100%',
     objectFit: 'contain',
     display: 'block'
   },
   thumbPending: {
-    width: '100%',
-    height: '100%',
+    position: 'absolute',
+    inset: 0,
     background: 'var(--bg-card)'
   },
   thumbCaption: {
