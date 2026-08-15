@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import SpeakButton from './SpeakButton'
 
 function greeting(name) {
   const h = new Date().getHours()
@@ -75,7 +76,10 @@ export default function Sidebar({ userName, dailyNote, reminders, weather, onHel
         {/* Daily Note */}
         {dailyNote ? (
           <div style={S.noteCard}>
-            <div style={S.noteLabel}>📋 Today's Note</div>
+            <div style={S.noteHeader}>
+              <div style={S.noteLabel}>📋 Today's Note</div>
+              <SpeakButton text={dailyNote} size="sm" />
+            </div>
             <div style={S.noteText}>{dailyNote}</div>
           </div>
         ) : null}
@@ -86,12 +90,13 @@ export default function Sidebar({ userName, dailyNote, reminders, weather, onHel
             {reminders.slice(0, 3).map((r, i) => (
               <div key={i} style={S.reminderItem}>
                 <span style={S.reminderBell}>🔔</span>
-                <div>
+                <div style={{ flex: 1 }}>
                   <div style={S.reminderText}>{r.message}</div>
                   <div style={S.reminderTime}>
                     {new Date(r.time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                   </div>
                 </div>
+                <SpeakButton text={r.message} size="sm" />
               </div>
             ))}
           </div>
@@ -112,7 +117,14 @@ export default function Sidebar({ userName, dailyNote, reminders, weather, onHel
           <div style={S.reminderCard}>
             <div style={{ fontSize: '2.5em', marginBottom: 12 }}>🔔</div>
             <div style={S.reminderPopupText}>{activeReminder.message}</div>
-            <button style={S.dismissBtn} onClick={() => setActiveReminder(null)}>
+            <SpeakButton text={activeReminder.message} size="lg" />
+            <button
+              style={S.dismissBtn}
+              onClick={() => {
+                window.launcher.logActivity('reminder-acknowledged', activeReminder.message)
+                setActiveReminder(null)
+              }}
+            >
               Got it ✓
             </button>
           </div>
@@ -222,6 +234,12 @@ const S = {
     display: 'flex',
     flexDirection: 'column',
     gap: 6
+  },
+  noteHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8
   },
   noteLabel: {
     fontSize: 'calc(0.75em * var(--font-scale, 1))',

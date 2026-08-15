@@ -10,6 +10,15 @@ export default function MessengerSettings({ messenger, onSave }) {
   const [turnCredential, setTurnCredential] = useState(messenger?.webrtc?.turnCredential ?? '')
   const [turnSaved, setTurnSaved] = useState(false)
 
+  const [discordWebhookUrl, setDiscordWebhookUrl] = useState(messenger?.discordWebhookUrl ?? '')
+  const [twilioAccountSid, setTwilioAccountSid] = useState(messenger?.twilioAccountSid ?? '')
+  const [twilioAuthToken, setTwilioAuthToken] = useState(messenger?.twilioAuthToken ?? '')
+  const [twilioFrom, setTwilioFrom] = useState(messenger?.twilioFrom ?? '')
+  const [caregiverPhone, setCaregiverPhone] = useState(messenger?.caregiverPhone ?? '')
+  const [helpSaved, setHelpSaved] = useState(false)
+  const [helpTesting, setHelpTesting] = useState(false)
+  const [helpTestResult, setHelpTestResult] = useState(null)
+
   useEffect(() => {
     window.admin.getMessengerInfo().then(setServerInfo).catch(() => setServerInfo(null))
   }, [])
@@ -18,6 +27,37 @@ export default function MessengerSettings({ messenger, onSave }) {
     await onSave({ ...messenger, webrtc: { ...(messenger?.webrtc ?? {}), turnUrl, turnUsername, turnCredential } })
     setTurnSaved(true)
     setTimeout(() => setTurnSaved(false), 2000)
+  }
+
+  async function saveHelpAlerts() {
+    await onSave({
+      ...messenger,
+      discordWebhookUrl,
+      twilioAccountSid,
+      twilioAuthToken,
+      twilioFrom,
+      caregiverPhone
+    })
+    setHelpSaved(true)
+    setTimeout(() => setHelpSaved(false), 2000)
+  }
+
+  async function testHelpAlert() {
+    setHelpTesting(true)
+    setHelpTestResult(null)
+    try {
+      const result = await window.admin.testHelpAlert()
+      const parts = []
+      if (result?.discordSent) parts.push('Discord ✓')
+      if (result?.sms?.ok) parts.push('SMS ✓')
+      if (result?.sms && !result.sms.ok) parts.push(`SMS failed (${result.sms.reason})`)
+      setHelpTestResult(parts.length
+        ? { ok: true, msg: parts.join(' · ') }
+        : { ok: false, msg: 'Nothing configured — add a Discord webhook or Twilio details above.' })
+    } catch {
+      setHelpTestResult({ ok: false, msg: 'Could not send test alert.' })
+    }
+    setHelpTesting(false)
   }
 
   async function testConnection() {
@@ -122,6 +162,56 @@ export default function MessengerSettings({ messenger, onSave }) {
           <button className="btn btn-primary" onClick={saveTurn}>Save</button>
           {turnSaved && <span className="saved-notice">Saved!</span>}
         </div>
+      </div>
+
+      <h2>Help Button Alerts</h2>
+      <div className="card">
+        <p style={{ color: 'var(--text-dim)', fontSize: '0.9em', marginBottom: 12, lineHeight: 1.5 }}>
+          When Jean presses <strong>"Need help?"</strong> on her launcher, this reaches you here —
+          not just by flashing the admin window, which only helps if you're sitting at her PC.
+          Configure either or both channels below; whichever is filled in will fire.
+        </p>
+        <div className="field">
+          <label>Discord Webhook URL</label>
+          <input
+            value={discordWebhookUrl}
+            onChange={e => setDiscordWebhookUrl(e.target.value)}
+            placeholder="https://discord.com/api/webhooks/..."
+          />
+        </div>
+        <div className="field">
+          <label>Caregiver Phone (for SMS)</label>
+          <input value={caregiverPhone} onChange={e => setCaregiverPhone(e.target.value)} placeholder="+15555550123" />
+        </div>
+        <div className="field">
+          <label>Twilio Account SID</label>
+          <input value={twilioAccountSid} onChange={e => setTwilioAccountSid(e.target.value)} placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+        </div>
+        <div className="field">
+          <label>Twilio Auth Token</label>
+          <input type="password" value={twilioAuthToken} onChange={e => setTwilioAuthToken(e.target.value)} placeholder="Twilio auth token" />
+        </div>
+        <div className="field">
+          <label>Twilio "From" Number</label>
+          <input value={twilioFrom} onChange={e => setTwilioFrom(e.target.value)} placeholder="+15555550199" />
+        </div>
+        <div className="row">
+          <button className="btn btn-primary" onClick={saveHelpAlerts}>Save</button>
+          {helpSaved && <span className="saved-notice">Saved!</span>}
+          <button className="btn btn-ghost" onClick={testHelpAlert} disabled={helpTesting}>
+            {helpTesting ? 'Sending…' : '🔔 Send Test Alert'}
+          </button>
+        </div>
+        {helpTestResult && (
+          <div style={{
+            ...styles.testBadge,
+            background: helpTestResult.ok ? 'rgba(80,200,120,0.12)' : 'rgba(220,80,80,0.12)',
+            borderColor: helpTestResult.ok ? 'rgba(80,200,120,0.4)' : 'rgba(220,80,80,0.4)',
+            color: helpTestResult.ok ? '#4ec87a' : '#e05555'
+          }}>
+            {helpTestResult.msg}
+          </div>
+        )}
       </div>
 
       <div className="card">

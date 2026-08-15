@@ -4,6 +4,7 @@ import MessagesView from './views/MessagesView'
 import MessengerView from './views/MessengerView'
 import GamesView from './views/GamesView'
 import PhotosView from './views/PhotosView'
+import TVView from './views/TVView/TVView'
 import HelpOverlay from './components/HelpOverlay'
 import ConfusionOverlay from './components/ConfusionOverlay'
 import WeatherOverlay from './components/WeatherOverlay'
@@ -15,6 +16,8 @@ import DailyCheckin from './components/DailyCheckin'
 import AIHelper from './components/AIHelper'
 import AIBuddy from './components/AIBuddy'
 import BuddyFloat from './components/BuddyFloat'
+import PhotoScreensaver from './components/PhotoScreensaver'
+import { openContactChat } from './utils/messenger'
 
 export default function App() {
   const [config, setConfig] = useState(null)
@@ -30,11 +33,13 @@ export default function App() {
   const [showAIHelper, setShowAIHelper] = useState(false)
   const [showAIBuddy, setShowAIBuddy] = useState(false)
   const [missedCalls, setMissedCalls] = useState(0)
+  const [showScreensaver, setShowScreensaver] = useState(false)
 
   const [incomingCall, setIncomingCall] = useState(null)   // { from, callerName, offer }
   const [activeCall, setActiveCall] = useState(null)        // { caller, localStream, remoteStream }
 
   const inactivityTimer = useRef(null)
+  const screensaverTimer = useRef(null)
   const tapTimes = useRef([])
   const peerRef = useRef(null)
   const iceCandidateQueue = useRef([])  // Buffer candidates that arrive during 3s overlay
@@ -85,11 +90,13 @@ export default function App() {
   useEffect(() => {
     const cleanup = window.launcher.onIncomingCall((data) => {
       let relation = ''
+      let autoAnswer = false
       if (configRef.current && configRef.current.contacts) {
         const c = configRef.current.contacts.find(c => c.name === data.callerName || (c.slug && c.slug === data.from))
         if (c && c.relation) relation = c.relation
+        if (c && c.autoAnswer) autoAnswer = true
       }
-      setIncomingCall({ ...data, relation })
+      setIncomingCall({ ...data, relation, autoAnswer })
       setMissedCalls(n => n + 1)
     })
     return cleanup
@@ -207,6 +214,22 @@ export default function App() {
   useEffect(() => {
     resetInactivity()
   }, [resetInactivity])
+
+  // Ambient photo screensaver — separate, shorter timer than the safety
+  // inactivity timeout above. Only arms on the bare home screen (no view,
+  // overlay, or call in the way) so it can never appear over something she's
+  // actually doing, and any activity anywhere clears it via PhotoScreensaver's
+  // own dismiss listeners.
+  const screensaverEligible =
+    view === 'home' && !showHelp && !showConfusion && !showWeather &&
+    !showCheckin && !showAIBuddy && !incomingCall && !activeCall
+
+  useEffect(() => {
+    clearTimeout(screensaverTimer.current)
+    if (!screensaverEligible) { setShowScreensaver(false); return }
+    screensaverTimer.current = setTimeout(() => setShowScreensaver(true), 2 * 60 * 1000)
+    return () => clearTimeout(screensaverTimer.current)
+  }, [screensaverEligible, showScreensaver])
 
   // Rapid-tap detection
   const trackTap = useCallback(() => {
@@ -345,6 +368,13 @@ export default function App() {
       if (!tile.kiosk) setView('browser')
     } else if (tile.type === 'app') {
       window.launcher.launchApp(tile.target)
+    } else if (tile.type === 'call') {
+      // One-tap contact tile — jump straight into their chat, skipping the
+      // Messages contact grid. She can then tap the "Please Call Me" quick
+      // reply that's already built into every chat.
+      openContactChat({ name: tile.contactName, slug: tile.target }, config?.messenger?.url)
+      window.launcher.logActivity('tile-open', `call-${tile.contactName}`)
+      return
     } else if (tile.type === 'built-in') {
       if (tile.target === 'messages') {
         setView('messages')
@@ -361,6 +391,10 @@ export default function App() {
       }
       if (tile.target === 'photos') {
         setView('photos')
+        return
+      }
+      if (tile.target === 'tv') {
+        setView('tv')
         return
       }
       if (tile.target === 'weather') setShowWeather(true)
@@ -405,9 +439,27 @@ export default function App() {
     )
   }
 
+  // Contacts the caregiver pinned to the home screen get a synthesized
+  // one-tap "Call {name}" tile alongside the configured ones. Kept out of
+  // the offline filter above — the embedded messenger runs on localhost and
+  // still shows cached chat history without internet.
+  const callTiles = (config.contacts || [])
+    .filter(c => c.homeTile && c.slug)
+    .map(c => ({
+      id:          `call-${c.id}`,
+      type:        'call',
+      icon:        '📞',
+      label:       `Call ${c.name}`,
+      target:      c.slug,
+      contactName: c.name
+    }))
+
   const effectiveConfig = {
     ...config,
-    tiles: isOnline ? config.tiles : config.tiles.filter(t => t.type !== 'web')
+    tiles: [
+      ...(isOnline ? config.tiles : config.tiles.filter(t => t.type !== 'web')),
+      ...callTiles
+    ]
   }
 
   return (
@@ -425,6 +477,10 @@ export default function App() {
           onHelpPress={handleHelpPress}
           badges={{ messages: missedCalls }}
         />
+      )}
+
+      {showScreensaver && (
+        <PhotoScreensaver onDismiss={() => setShowScreensaver(false)} />
       )}
 
       {view === 'messages' && (
@@ -462,6 +518,13 @@ export default function App() {
       {view === 'photos' && (
         <PhotosView
           photosConfig={config.photos}
+          onBack={goHome}
+          onHelp={handleHelpPress}
+        />
+      )}
+
+      {view === 'tv' && (
+        <TVView
           onBack={goHome}
           onHelp={handleHelpPress}
         />
@@ -520,15 +583,15 @@ export default function App() {
         />
       )}
 
-      {/* AI Buddy - persistent floating button + chat panel */}
-      {!showAIBuddy && (
+      {/* AI Buddy - persistent floating button + chat panel, hidden over Photos so it never covers preview thumbnails or the full-size lightbox */}
+      {!showAIBuddy && view !== 'photos' && (
         <BuddyFloat
           onClick={() => setShowAIBuddy(true)}
           hasUnread={false}
         />
       )}
 
-      {showAIBuddy && (
+      {showAIBuddy && view !== 'photos' && (
         <AIBuddy
           onClose={() => setShowAIBuddy(false)}
           onTileOpen={(target) => {

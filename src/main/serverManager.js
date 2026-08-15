@@ -92,8 +92,23 @@ export function updateMessengerConfig(messenger = {}) {
       url:        messenger.webrtc?.turnUrl        || '',
       username:   messenger.webrtc?.turnUsername   || '',
       credential: messenger.webrtc?.turnCredential || ''
+    },
+    twilio: {
+      accountSid:     messenger.twilioAccountSid || '',
+      authToken:      messenger.twilioAuthToken  || '',
+      from:           messenger.twilioFrom       || '',
+      caregiverPhone: messenger.caregiverPhone   || ''
     }
   })
+}
+
+// Reach family over Discord/SMS when Jean presses "Need help?" — unlike the
+// local admin-window flash, this works even when nobody is at her PC.
+// Resolves to { discordSent, sms } so callers can log what actually fired;
+// no-ops (resolves undefined) if the server or channels aren't configured.
+export async function sendHelpAlert() {
+  if (!serverInstance || typeof serverInstance.sendHelpAlert !== 'function') return
+  return serverInstance.sendHelpAlert()
 }
 
 export function getMessengerUrl() {

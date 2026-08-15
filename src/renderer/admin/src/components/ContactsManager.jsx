@@ -10,6 +10,8 @@ function emptyContact() {
     phone: '',
     photo: '',
     slug: '',
+    autoAnswer: false,
+    homeTile: false,
     messages: [...DEFAULT_MESSAGES]
   }
 }
@@ -123,6 +125,33 @@ export default function ContactsManager({ contacts, onSave }) {
                   placeholder="e.g. 4321"
                   maxLength={12}
                 />
+              </div>
+              <div className="field" style={{ marginBottom: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!c.autoAnswer}
+                    onChange={e => update(c.id, 'autoAnswer', e.target.checked)}
+                    style={{ width: 'auto' }}
+                  />
+                  Auto-answer video calls from this contact
+                </label>
+                <div style={{ fontSize: '0.8em', color: 'var(--text-dim)', marginTop: 4 }}>
+                  Only enable for people she'd want to see connect automatically — the call
+                  still rings and chimes first, but she won't need to tap Answer.
+                  Everyone else always rings until she taps Answer or Decline.
+                </div>
+              </div>
+              <div className="field" style={{ marginBottom: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!c.homeTile}
+                    onChange={e => update(c.id, 'homeTile', e.target.checked)}
+                    style={{ width: 'auto' }}
+                  />
+                  Add a one-tap "Call {c.name || 'them'}" tile to the home screen
+                </label>
               </div>
               <label>Pre-made messages</label>
               {c.messages.map((msg, i) => (

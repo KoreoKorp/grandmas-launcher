@@ -1,9 +1,16 @@
 import React, { useEffect } from 'react'
+import { speak, stopSpeaking } from '../utils/speech'
 
 export default function HelpOverlay({ caregiverName, onGoHome, onDismiss, onCallCaregiver }) {
-  // Fade in on mount
+  // Fade in on mount, and speak the reassurance aloud — someone confused or
+  // anxious enough to hit Help may not think to tap a speaker icon, so this
+  // one reads itself rather than waiting to be asked.
   useEffect(() => {
     window.launcher.logActivity('help-overlay-shown')
+    const t = setTimeout(() => {
+      speak("It's okay! You're safe at home on your laptop.")
+    }, 300)
+    return () => { clearTimeout(t); stopSpeaking() }
   }, [])
 
   return (

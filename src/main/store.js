@@ -12,8 +12,10 @@ const defaults = {
     { id: 'photos',    type: 'built-in', icon: '🖼️',  label: 'Photos',   target: 'photos' },
     { id: 'games',     type: 'built-in', icon: '🎮',  label: 'Games',    target: 'games' },
     { id: 'weather',   type: 'built-in', icon: '🌤️', label: 'Weather',  target: 'weather' },
-    { id: 'messages',  type: 'built-in', icon: '💬',  label: 'Messages', target: 'messages' },
-    { id: 'music',     type: 'built-in', icon: '🎵',  label: 'Music',    target: 'music' }
+    { id: 'ai-helper', type: 'built-in', icon: '🤖',  label: 'Ask AI',   target: 'ai-helper' },
+     { id: 'messages',  type: 'built-in', icon: '💬',  label: 'Messages', target: 'messages' },
+     { id: 'music',     type: 'built-in', icon: '🎵',  label: 'Music',    target: 'music' },
+     { id: 'tv',        type: 'built-in', icon: '📺',  label: 'TV Remote', target: 'tv' }
   ],
   reminders: [],
   contacts: [],
@@ -72,10 +74,20 @@ const defaults = {
   },
   photos: {
     albumUrl: '',
-    localPath: ''
+    localPath: '',
+    captions: {}   // filename → caption, e.g. "Sarah — your daughter — Bermuda, 2019"
   },
   familyRadio: {
     enabled: true
+  },
+  tv: {
+    ip: '',
+    token: '',
+    name: '',
+    model: '',
+    enabled: true,
+    lastConnected: null,
+    lastError: null
   },
   userName: 'Grandma',
   activityLog: [],
@@ -150,6 +162,13 @@ if (cleanedTiles.length !== tiles.length) {
   store.set('tiles', migratedTiles)
 }
 
+// Ensure photos.captions exists on installs that predate the captions
+// feature — electron-store only fills in top-level default keys that are
+// entirely missing, not new sub-keys added to an existing nested object.
+if (!store.get('photos.captions')) {
+  store.set('photos.captions', {})
+}
+
 // Migrate single-location weather config to multi-location array format.
 // Keep the old `location` string so any callers that haven't been updated yet
 // still work; the new `locations` array is the source of truth going forward.
@@ -193,13 +212,12 @@ if (!weather.locations) {
   }
 }
 
-// One-time migration: add AI helper tile (skipped on subsequent launches so caregivers can remove it)
-if (!store.get('migrations.aiTileAdded')) {
+// Ensure AI helper tile exists on every launch
+{
   const currentTiles = store.get('tiles')
   if (!currentTiles.find(t => t.id === 'ai-helper')) {
-    store.set('tiles', [...currentTiles, { id: 'ai-helper', type: 'built-in', icon: '🤖', label: 'Ask AI', target: 'ai-helper' }])
+    store.set('tiles', insertTileBeforePhotos(currentTiles, { id: 'ai-helper', type: 'built-in', icon: '🤖', label: 'Ask AI', target: 'ai-helper' }))
   }
-  store.set('migrations.aiTileAdded', true)
 }
 
 // Insert a tile just before the first built-in tile (Photos) so tiles migrated
@@ -220,7 +238,8 @@ function insertTileBeforePhotos(tiles, tile) {
 for (const [tileId, migrationFlag] of [
   ['bermuda-news',  'bermudaNewsTileAdded'],
   ['sixty-and-me',  'sixtyAndMeTileAdded'],
-  ['mental-floss',  'mentalFlossTileAdded']
+  ['mental-floss',  'mentalFlossTileAdded'],
+  ['tv',            'tvTileAdded']
 ]) {
   if (store.get(`migrations.${migrationFlag}`)) continue
   const currentTiles = store.get('tiles')

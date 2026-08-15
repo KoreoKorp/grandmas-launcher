@@ -5,8 +5,9 @@ import os from 'os'
 import { store, logActivity, saveBackup, restoreBackup } from './store.js'
 import { fetchWeather, clearWeatherCache } from './weather.js'
 import { expandLauncher } from './windows.js'
-import { getMessengerPort, getMessengerUrl, updateMessengerConfig, syncMessengerContacts } from './serverManager.js'
+import { getMessengerPort, getMessengerUrl, updateMessengerConfig, syncMessengerContacts, sendHelpAlert } from './serverManager.js'
 import { enableAdBlockingFor } from './adBlocker.js'
+import * as tvService from './tvService.js'
 
 const PINTEREST_AD_CSS = `
   [data-test-id="ad-label"], [data-test-id*="promoted"], [data-test-id*="ad-pin"],
@@ -59,6 +60,28 @@ let lastBrowserActivity = Date.now()
 let _emitSignal = null
 export function setSignalEmitter(fn) { _emitSignal = fn }
 function emitSignal(event, data) { if (_emitSignal) _emitSignal(event, data) }
+
+// Shared by the launcher's Photos view and the admin caption editor so both
+// see the same file list from the same folder in the same shape.
+async function listLocalPhotos() {
+  const localPath = store.get('photos.localPath') ?? ''
+  if (!localPath) return []
+  try {
+    const files  = await readdir(localPath)
+    const images = files.filter(f => /\.(png|jpg|jpeg|gif|webp|bmp)$/i.test(f))
+    return images.map(file => {
+      const abs = join(localPath, file)
+      return {
+        name: file,
+        path: abs,
+        url: `file://${abs.replace(/\\/g, '/')}`
+      }
+    })
+  } catch (err) {
+    console.error('[photos] Error reading local photos folder:', err)
+    return []
+  }
+}
 
 export function setWindows(launcher, admin) {
   launcherWin = launcher
@@ -153,6 +176,16 @@ export function registerIPC() {
     } catch (err) {
       console.error('[help-notification] error:', err)
     }
+
+    // Reach family remotely too — the admin-window flash above only helps if
+    // someone is physically at her PC. Discord/SMS go out regardless, over
+    // whichever channel(s) the caregiver has configured (both are optional
+    // and independently no-op if unconfigured).
+    sendHelpAlert()
+      .then(result => {
+        if (result) logActivity('help-alert-sent', JSON.stringify(result))
+      })
+      .catch(err => console.error('[help-notification] remote alert failed:', err))
   })
 
   ipcMain.handle('launcher:launch-app', async (event, { path }) => {
@@ -351,24 +384,15 @@ RULES:
   })
 
   ipcMain.handle('launcher:get-local-photos', async () => {
-    const localPath = store.get('photos.localPath') ?? ''
-    if (!localPath) return []
-    try {
-      const files = await readdir(localPath)
-      const images = files.filter(f => /\.(png|jpg|jpeg|gif|webp|bmp)$/i.test(f))
-      return images.map(file => {
-        const abs = join(localPath, file)
-        return {
-          name: file,
-          path: abs,
-          url: `file://${abs.replace(/\\/g, '/')}`
-        }
-      })
-    } catch (err) {
-      console.error('[photos] Error reading local photos folder:', err)
-      return []
-    }
+    const captions = store.get('photos.captions') || {}
+    const photos   = await listLocalPhotos()
+    return photos.map(p => ({ ...p, caption: captions[p.name] || '' }))
   })
+
+  // Admin panel needs the same listing to build the caption editor —
+  // captions themselves are saved through the normal admin:set('photos', …)
+  // path, same as albumUrl/localPath.
+  ipcMain.handle('admin:get-local-photos', async () => listLocalPhotos())
 
   // Generate a small thumbnail for a photo. Rendering full-resolution images
   // into a grid decodes huge bitmaps into memory (slow, can stall the UI);
@@ -376,6 +400,17 @@ RULES:
   ipcMain.handle('launcher:get-photo-thumbnail', async (_, { path }) => {
     try {
       const img = await nativeImage.createThumbnailFromPath(path, { width: 400, height: 400 })
+      return img.toDataURL()
+    } catch (err) {
+      console.error('[photos] thumbnail failed:', path, err.message)
+      return null
+    }
+  })
+
+  // Same thumbnail generator, exposed to the admin caption editor.
+  ipcMain.handle('admin:get-photo-thumbnail', async (_, { path }) => {
+    try {
+      const img = await nativeImage.createThumbnailFromPath(path, { width: 200, height: 200 })
       return img.toDataURL()
     } catch (err) {
       console.error('[photos] thumbnail failed:', path, err.message)
@@ -433,6 +468,15 @@ RULES:
   })
 
   ipcMain.handle('admin:get-config', () => store.store)
+
+  ipcMain.handle('admin:test-help-alert', async () => {
+    try {
+      return (await sendHelpAlert()) || { discordSent: false, sms: { ok: false, reason: 'Server not running' } }
+    } catch (err) {
+      console.error('[test-help-alert] error:', err)
+      return { discordSent: false, sms: { ok: false, reason: err.message } }
+    }
+  })
 
   ipcMain.handle('admin:get-messenger-info', () => {
     const port = getMessengerPort()
@@ -544,6 +588,142 @@ RULES:
 
   ipcMain.on('admin:show-launcher', () => {
     expandLauncher(launcherWin)
+  })
+
+  // ── TV Remote ────────────────────────────────────────────────────────────
+
+  // Load saved TV credentials on startup
+  const tvConfig = store.get('tv')
+  if (tvConfig?.ip && tvConfig?.token) {
+    tvService.loadCredentials(tvConfig.ip, tvConfig.token)
+  }
+
+  ipcMain.handle('launcher:tv-get-status', () => {
+    return tvService.getTvStatus()
+  })
+
+  ipcMain.handle('launcher:tv-discover', async () => {
+    return await tvService.discoverTVs()
+  })
+
+  ipcMain.handle('launcher:tv-start-pairing', async (_, { ip }) => {
+    return await tvService.startPairing(ip)
+  })
+
+  ipcMain.handle('launcher:tv-complete-pairing', async (_, { pin }) => {
+    const result = await tvService.completePairing(pin)
+    if (result.success) {
+      const status = tvService.getTvStatus()
+      store.set('tv.ip', status.ip)
+      store.set('tv.token', result.authToken)
+      store.set('tv.lastConnected', Date.now())
+    }
+    return result
+  })
+
+  ipcMain.handle('launcher:tv-power-on', async () => {
+    return await tvService.powerOn()
+  })
+
+  ipcMain.handle('launcher:tv-power-off', async () => {
+    return await tvService.powerOff()
+  })
+
+  ipcMain.handle('launcher:tv-volume-up', async () => {
+    return await tvService.volumeUp()
+  })
+
+  ipcMain.handle('launcher:tv-volume-down', async () => {
+    return await tvService.volumeDown()
+  })
+
+  ipcMain.handle('launcher:tv-mute', async () => {
+    return await tvService.mute()
+  })
+
+  ipcMain.handle('launcher:tv-channel-up', async () => {
+    return await tvService.channelUp()
+  })
+
+  ipcMain.handle('launcher:tv-channel-down', async () => {
+    return await tvService.channelDown()
+  })
+
+  ipcMain.handle('launcher:tv-set-input', async (_, { input }) => {
+    return await tvService.setInput(input)
+  })
+
+  ipcMain.handle('launcher:tv-launch-app', async (_, { app }) => {
+    return await tvService.launchApp(app)
+  })
+
+  ipcMain.handle('launcher:tv-get-input', async () => {
+    return await tvService.getCurrentInput()
+  })
+
+  ipcMain.handle('launcher:tv-get-power', async () => {
+    return await tvService.getPowerState()
+  })
+
+  ipcMain.handle('launcher:tv-clear-pairing', () => {
+    tvService.clearCredentials()
+    store.set('tv.ip', '')
+    store.set('tv.token', '')
+    store.set('tv.lastConnected', null)
+    return { ok: true }
+  })
+
+  // ── TV Remote (Admin) ───────────────────────────────────────────────────
+
+  ipcMain.handle('admin:tv-get-status', () => {
+    return tvService.getTvStatus()
+  })
+
+  ipcMain.handle('admin:tv-discover', async () => {
+    return await tvService.discoverTVs()
+  })
+
+  ipcMain.handle('admin:tv-start-pairing', async (_, { ip }) => {
+    return await tvService.startPairing(ip)
+  })
+
+  ipcMain.handle('admin:tv-complete-pairing', async (_, { pin }) => {
+    const result = await tvService.completePairing(pin)
+    if (result.success) {
+      const status = tvService.getTvStatus()
+      store.set('tv.ip', status.ip)
+      store.set('tv.token', result.authToken)
+      store.set('tv.lastConnected', Date.now())
+    }
+    return result
+  })
+
+  ipcMain.handle('admin:tv-clear-pairing', () => {
+    tvService.clearCredentials()
+    store.set('tv.ip', '')
+    store.set('tv.token', '')
+    store.set('tv.lastConnected', null)
+    return { ok: true }
+  })
+
+  ipcMain.handle('admin:tv-power-on', async () => {
+    return await tvService.powerOn()
+  })
+
+  ipcMain.handle('admin:tv-power-off', async () => {
+    return await tvService.powerOff()
+  })
+
+  ipcMain.handle('admin:tv-volume-up', async () => {
+    return await tvService.volumeUp()
+  })
+
+  ipcMain.handle('admin:tv-volume-down', async () => {
+    return await tvService.volumeDown()
+  })
+
+  ipcMain.handle('admin:tv-mute', async () => {
+    return await tvService.mute()
   })
 
   // ── WebRTC signaling relay ────────────────────────────────────────────────

@@ -146,6 +146,12 @@ export async function startServer(config) {
   let adminPassword     = config.adminPassword     || ''
   let discordWebhookUrl = config.discordWebhookUrl || ''
   let turnConfig        = { url: turn.url || '', username: turn.username || '', credential: turn.credential || '' }
+  let twilioConfig       = {
+    accountSid:     twilio.accountSid     || '',
+    authToken:      twilio.authToken      || '',
+    from:           twilio.from           || '',
+    caregiverPhone: twilio.caregiverPhone || ''
+  }
 
   // ICE servers handed to family browsers over the socket after they
   // authenticate. Family connects through the Cloudflare tunnel, so without a
@@ -166,24 +172,68 @@ export async function startServer(config) {
   const db = makeDataHelpers(dataDir)
 
   // ── Discord webhook ────────────────────────────────────────
-  async function sendDiscordAlert(contactName, knownIP, newIP) {
-    if (!discordWebhookUrl) return
+  // Generic embed sender — the IP-change security alert and the Help button
+  // alert both post through this so a caregiver only has to configure one
+  // webhook URL to get both kinds of notification.
+  async function sendDiscordEmbed(title, description, color = 0xFF4444) {
+    if (!discordWebhookUrl) return false
     try {
-      await fetch(discordWebhookUrl, {
+      const res = await fetch(discordWebhookUrl, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          embeds: [{
-            title:       "⚠️ Security Alert — Jean's Messenger",
-            description: `**${contactName}** connected from a new IP address.\n\n` +
-                         `**Known IP:** \`${knownIP}\`\n**New IP:** \`${newIP}\`\n\n` +
-                         `They have been **allowed through**. If this wasn't ${contactName}, open the admin panel → find their contact → click **Clear IP**.`,
-            color:     0xFF4444,
-            timestamp: new Date().toISOString()
-          }]
+          embeds: [{ title, description, color, timestamp: new Date().toISOString() }]
         })
       })
-    } catch (e) { console.error('[messenger] Discord webhook failed:', e.message) }
+      return res.ok
+    } catch (e) { console.error('[messenger] Discord webhook failed:', e.message); return false }
+  }
+
+  async function sendDiscordAlert(contactName, knownIP, newIP) {
+    await sendDiscordEmbed(
+      "⚠️ Security Alert — Jean's Messenger",
+      `**${contactName}** connected from a new IP address.\n\n` +
+      `**Known IP:** \`${knownIP}\`\n**New IP:** \`${newIP}\`\n\n` +
+      `They have been **allowed through**. If this wasn't ${contactName}, open the admin panel → find their contact → click **Clear IP**.`
+    )
+  }
+
+  // ── Twilio SMS ───────────────────────────────────────────────
+  // Generic SMS sender — reused by the Help button alert and the admin
+  // panel's manual "send system report" action.
+  async function sendSms(body) {
+    const { accountSid, authToken: authTok, from, caregiverPhone } = twilioConfig
+    if (!accountSid || !authTok || !from || !caregiverPhone) {
+      return { ok: false, reason: 'Twilio not configured' }
+    }
+    try {
+      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+        method: 'POST',
+        headers: {
+          'Authorization':  'Basic ' + Buffer.from(`${accountSid}:${authTok}`).toString('base64'),
+          'Content-Type':   'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({ To: caregiverPhone, From: from, Body: body }).toString()
+      })
+      if (!r.ok) { const e = await r.json(); return { ok: false, reason: e.message || r.statusText } }
+      return { ok: true }
+    } catch (e) { return { ok: false, reason: e.message } }
+  }
+
+  // ── Help button alert ───────────────────────────────────────
+  // Fired when Jean presses "Need help?" on the launcher. Reaches family over
+  // every channel that's configured (both, either, or neither) — unlike the
+  // local admin-window flash, this works even when nobody is sitting at her PC.
+  async function sendHelpAlert() {
+    const results = await Promise.all([
+      sendDiscordEmbed(
+        '💙 Jean needs help',
+        'She just pressed the **Need help?** button on her launcher. Please check on her.',
+        0xEBB552
+      ),
+      sendSms("Jean pressed the 'Need help?' button on her launcher. Please check on her.")
+    ])
+    return { discordSent: results[0], sms: results[1] }
   }
 
   // ── PIN rate limiting ──────────────────────────────────────
@@ -399,23 +449,8 @@ export async function startServer(config) {
 
   // ── SMS system report ──────────────────────────────────────
   expressApp.post('/send-sys-report', requireAdmin, async (req, res) => {
-    const { accountSid, authToken: twilioAuth, from, caregiverPhone } = twilio
-    if (!accountSid || !twilioAuth || !from || !caregiverPhone) {
-      return res.json({ ok: false, reason: 'Twilio not configured' })
-    }
     const { message } = req.body
-    try {
-      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
-        method: 'POST',
-        headers: {
-          'Authorization':  'Basic ' + Buffer.from(`${accountSid}:${twilioAuth}`).toString('base64'),
-          'Content-Type':   'application/x-www-form-urlencoded'
-        },
-        body: new URLSearchParams({ To: caregiverPhone, From: from, Body: message }).toString()
-      })
-      if (!r.ok) { const e = await r.json(); return res.json({ ok: false, reason: e.message || r.statusText }) }
-      res.json({ ok: true })
-    } catch (e) { res.json({ ok: false, reason: e.message }) }
+    res.json(await sendSms(message))
   })
 
   // ── Room / messages API ────────────────────────────────────
@@ -628,7 +663,16 @@ export async function startServer(config) {
         username:   next.turn.username   || '',
         credential: next.turn.credential || ''
       }
+      if (next.twilio             !== undefined) twilioConfig      = {
+        accountSid:     next.twilio.accountSid     || '',
+        authToken:      next.twilio.authToken      || '',
+        from:           next.twilio.from           || '',
+        caregiverPhone: next.twilio.caregiverPhone || ''
+      }
     },
+    // Reach family over every configured channel when Jean presses Help.
+    // Exposed so ipc.js can call it directly (same process, no HTTP hop).
+    sendHelpAlert,
     // Mirror the launcher's contact list (electron-store) into messenger
     // contacts. The Electron admin panel is the only contact UI in practice —
     // without this sync a slug typed there never exists on the server and the

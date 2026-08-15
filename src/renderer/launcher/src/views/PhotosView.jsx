@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import SpeakButton from '../components/SpeakButton'
 
 const SLIDESHOW_INTERVAL_MS = 5000
 
@@ -16,16 +17,15 @@ export default function PhotosView({ photosConfig, onBack }) {
   useEffect(() => {
     window.launcher.getLocalPhotos().then(photos => {
       setLocalPhotos(photos)
-      // Generate lightweight native thumbnails for the grid so we don't decode
-      // full-resolution images into memory. Full-res is used only in the lightbox.
-      Promise.all(
-        photos.map(p =>
-          window.launcher.getPhotoThumbnail(p.path).then(url => [p.path, url])
-        )
-      ).then(pairs => {
-        const map = {}
-        pairs.forEach(([path, url]) => { if (url) map[path] = url })
-        setThumbs(map)
+      // Fetch thumbnails one at a time and paint each as it arrives, rather than
+      // waiting on every photo before showing any — with hundreds of photos,
+      // batching them all into one Promise.all left the grid blank for a long
+      // stretch and then popped every image in at once, which is what produced
+      // the "overlapping" glitch during that mass-mount reflow.
+      photos.forEach(p => {
+        window.launcher.getPhotoThumbnail(p.path).then(url => {
+          if (url) setThumbs(prev => ({ ...prev, [p.path]: url }))
+        })
       })
     })
   }, [])
@@ -117,13 +117,22 @@ export default function PhotosView({ photosConfig, onBack }) {
                     style={S.photoCard}
                     onClick={() => setSelectedIndex(i)}
                   >
-                    <img
-                      src={thumbs[photo.path] || photo.url}
-                      alt={photo.name}
-                      style={S.thumb}
-                      loading="lazy"
-                      decoding="async"
-                    />
+                    <div style={S.thumbFrame}>
+                      {thumbs[photo.path] ? (
+                        <img
+                          src={thumbs[photo.path]}
+                          alt={photo.name}
+                          style={S.thumb}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <div style={S.thumbPending} />
+                      )}
+                    </div>
+                    {photo.caption && (
+                      <div style={S.thumbCaption}>{photo.caption}</div>
+                    )}
                   </button>
                 ))}
               </div>
@@ -144,7 +153,10 @@ export default function PhotosView({ photosConfig, onBack }) {
       {selectedPhoto && (
         <div style={S.lightbox} onClick={closeLightbox}>
           {localPhotos.length > 1 && (
-            <button style={{ ...S.navArrow, ...S.navPrev }} onClick={showPrev} aria-label="Previous photo">‹</button>
+            <div style={{ ...S.navGroup, ...S.navGroupLeft }} onClick={e => e.stopPropagation()}>
+              <span style={S.navLabel}>PREVIOUS PICTURE</span>
+              <button style={S.navArrow} onClick={showPrev} aria-label="Previous photo">‹</button>
+            </div>
           )}
 
           <img
@@ -155,7 +167,10 @@ export default function PhotosView({ photosConfig, onBack }) {
           />
 
           {localPhotos.length > 1 && (
-            <button style={{ ...S.navArrow, ...S.navNext }} onClick={showNext} aria-label="Next photo">›</button>
+            <div style={{ ...S.navGroup, ...S.navGroupRight }} onClick={e => e.stopPropagation()}>
+              <span style={S.navLabel}>NEXT PICTURE</span>
+              <button style={S.navArrow} onClick={showNext} aria-label="Next photo">›</button>
+            </div>
           )}
 
           {/* Top-right controls */}
@@ -170,6 +185,16 @@ export default function PhotosView({ photosConfig, onBack }) {
             )}
             <button style={S.closeBtn} onClick={closeLightbox} aria-label="Close">✕</button>
           </div>
+
+          {selectedPhoto.caption && (
+            <div
+              style={{ ...S.captionBanner, bottom: localPhotos.length > 1 ? 76 : 24 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <span style={S.captionText}>{selectedPhoto.caption}</span>
+              <SpeakButton text={selectedPhoto.caption} size="md" />
+            </div>
+          )}
 
           {localPhotos.length > 1 && (
             <div style={S.counter}>{selectedIndex + 1} / {localPhotos.length}</div>
@@ -266,20 +291,44 @@ const S = {
     alignContent: 'start'
   },
   photoCard: {
+    display: 'flex',
+    flexDirection: 'column',
     border: '2px solid var(--border)',
     borderRadius: 'var(--radius-sm)',
     overflow: 'hidden',
     cursor: 'pointer',
     background: 'var(--bg-card)',
     padding: 0,
-    aspectRatio: '1',
     transition: 'transform var(--transition-bounce), border-color var(--transition-fast), box-shadow var(--transition-smooth)'
+  },
+  thumbFrame: {
+    width: '100%',
+    aspectRatio: '1',
+    flexShrink: 0
   },
   thumb: {
     width: '100%',
     height: '100%',
-    objectFit: 'cover',
+    objectFit: 'contain',
     display: 'block'
+  },
+  thumbPending: {
+    width: '100%',
+    height: '100%',
+    background: 'var(--bg-card)'
+  },
+  thumbCaption: {
+    width: '100%',
+    padding: '6px 10px',
+    fontSize: 'calc(0.8em * var(--font-scale, 1))',
+    fontWeight: 600,
+    color: 'var(--text-secondary)',
+    background: 'var(--bg-card)',
+    borderTop: '1px solid var(--border-subtle)',
+    textAlign: 'left',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
   },
   emptyState: {
     display: 'flex',
@@ -364,28 +413,62 @@ const S = {
     justifyContent: 'center',
     flexShrink: 0
   },
-  navArrow: {
+  navGroup: {
     position: 'absolute',
     top: '50%',
     transform: 'translateY(-50%)',
-    width: 72,
-    height: 72,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 12,
+    zIndex: 2
+  },
+  navGroupLeft: { left: 24 },
+  navGroupRight: { right: 24 },
+  navLabel: {
+    color: '#fff',
+    fontSize: '1.05em',
+    fontWeight: 800,
+    letterSpacing: '0.05em',
+    textShadow: '0 2px 6px rgba(0,0,0,0.7)',
+    whiteSpace: 'nowrap'
+  },
+  navArrow: {
+    width: 100,
+    height: 100,
     borderRadius: '50%',
     background: 'rgba(255,255,255,0.15)',
     border: '1px solid rgba(255,255,255,0.3)',
     color: '#fff',
-    fontSize: '2.6em',
+    fontSize: '3.6em',
     fontWeight: 700,
     lineHeight: 1,
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 6,
+    paddingBottom: 8
+  },
+  captionBanner: {
+    position: 'absolute',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    maxWidth: '80%',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 14,
+    padding: '10px 20px',
+    borderRadius: 20,
+    background: 'rgba(0,0,0,0.6)',
+    border: '1px solid rgba(255,255,255,0.2)',
     zIndex: 2
   },
-  navPrev: { left: 24 },
-  navNext: { right: 24 },
+  captionText: {
+    color: '#fff',
+    fontSize: 'calc(1.15em * var(--font-scale, 1))',
+    fontWeight: 700,
+    lineHeight: 1.4
+  },
   counter: {
     position: 'absolute',
     bottom: 24,

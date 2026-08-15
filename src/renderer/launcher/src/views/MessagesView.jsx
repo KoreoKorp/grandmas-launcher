@@ -1,30 +1,9 @@
 import React from 'react'
+import { openContactChat } from '../utils/messenger'
 
 export default function MessagesView({ contacts, messengerBase, onBack, onHelp }) {
   function openContact(contact) {
-    const slug = contact.slug?.trim()
-
-    // Security: only allow [a-z0-9_-] slugs, even if store data is unexpected
-    const safeSlug = slug ? slug.replace(/[^a-z0-9_-]/g, '') : ''
-
-    // messengerBase is the embedded server URL (http://localhost:<port>).
-    // If it's absent the server isn't up — bail rather than opening the live site.
-    let base = (messengerBase || '').trim()
-    if (!base) {
-      window.launcher.logActivity('messenger-unavailable', contact.name)
-      return
-    }
-    if (!base.startsWith('http://') && !base.startsWith('https://')) {
-      base = `https://${base}`
-    }
-    base = base.replace(/\/+$/, '')
-
-    const url = safeSlug ? `${base}/?room=${safeSlug}` : base
-
-    window.launcher.openUrl(url, false, 'persist:launcher')
-    window.launcher.logActivity('messenger-opened', contact.name)
-    // No view change needed — openUrl triggers launcher:browser-opened
-    // which App.jsx handles by switching to 'browser' view
+    openContactChat(contact, messengerBase)
   }
 
   return (

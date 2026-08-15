@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 
 export default function IncomingCallOverlay({ caller, onAnswer, onDecline }) {
+  const autoAnswer = !!caller.autoAnswer
   const [countdown, setCountdown] = useState(3)
   const answered = useRef(false)
   // Ref keeps the latest onAnswer without being a countdown-effect dependency —
@@ -31,8 +32,11 @@ export default function IncomingCallOverlay({ caller, onAnswer, onDecline }) {
     return () => { if (ctx) ctx.close() }
   }, [])
 
-  // 3-second countdown then auto-answer — empty deps so interval never restarts
+  // 3-second countdown then auto-answer — but ONLY for contacts the caregiver
+  // has explicitly marked trusted (caller.autoAnswer). Everyone else just
+  // rings — she taps Answer or Decline herself, same as any other call.
   useEffect(() => {
+    if (!autoAnswer) return
     const id = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
@@ -47,7 +51,7 @@ export default function IncomingCallOverlay({ caller, onAnswer, onDecline }) {
       })
     }, 1000)
     return () => clearInterval(id)
-  }, [])
+  }, [autoAnswer])
 
   return (
     <div style={styles.backdrop}>
@@ -56,7 +60,10 @@ export default function IncomingCallOverlay({ caller, onAnswer, onDecline }) {
         <div style={styles.title}>Family is calling…</div>
         <div style={styles.name}>{caller.callerName || 'Family'}</div>
         {caller.relation && <div style={styles.relation}>This is your {caller.relation}</div>}
-        <div style={styles.countdown}>Connecting in {countdown}…</div>
+        {autoAnswer
+          ? <div style={styles.countdown}>Connecting in {countdown}…</div>
+          : <div style={styles.countdown}>Tap Answer to talk with them</div>
+        }
         <button style={styles.answerBtn} onClick={() => { answered.current = true; onAnswer() }}>
           Answer Now
         </button>

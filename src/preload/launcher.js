@@ -22,6 +22,24 @@ contextBridge.exposeInMainWorld('launcher', {
   getFamilyRadioQueue: () => ipcRenderer.invoke('launcher:get-family-radio-queue'),
   markFamilyRadioPlayed: (id) => ipcRenderer.invoke('launcher:mark-family-radio-played', { id }),
 
+  // TV Remote
+  tvGetStatus: () => ipcRenderer.invoke('launcher:tv-get-status'),
+  tvDiscover: () => ipcRenderer.invoke('launcher:tv-discover'),
+  tvStartPairing: (ip) => ipcRenderer.invoke('launcher:tv-start-pairing', { ip }),
+  tvCompletePairing: (pin) => ipcRenderer.invoke('launcher:tv-complete-pairing', { pin }),
+  tvPowerOn: () => ipcRenderer.invoke('launcher:tv-power-on'),
+  tvPowerOff: () => ipcRenderer.invoke('launcher:tv-power-off'),
+  tvVolumeUp: () => ipcRenderer.invoke('launcher:tv-volume-up'),
+  tvVolumeDown: () => ipcRenderer.invoke('launcher:tv-volume-down'),
+  tvMute: () => ipcRenderer.invoke('launcher:tv-mute'),
+  tvChannelUp: () => ipcRenderer.invoke('launcher:tv-channel-up'),
+  tvChannelDown: () => ipcRenderer.invoke('launcher:tv-channel-down'),
+  tvSetInput: (input) => ipcRenderer.invoke('launcher:tv-set-input', { input }),
+  tvLaunchApp: (app) => ipcRenderer.invoke('launcher:tv-launch-app', { app }),
+  tvGetInput: () => ipcRenderer.invoke('launcher:tv-get-input'),
+  tvGetPower: () => ipcRenderer.invoke('launcher:tv-get-power'),
+  tvClearPairing: () => ipcRenderer.invoke('launcher:tv-clear-pairing'),
+
   onWeatherUpdated: (cb) => {
     const h = (_, data) => cb(data)
     ipcRenderer.on('launcher:weather-updated', h)

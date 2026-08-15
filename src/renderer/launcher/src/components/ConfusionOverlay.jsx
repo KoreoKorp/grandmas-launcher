@@ -1,10 +1,19 @@
 import React, { useEffect } from 'react'
+import { speak, stopSpeaking } from '../utils/speech'
 
 export default function ConfusionOverlay({ onGoHome, onDismiss }) {
   // Auto-dismiss after 10s
   useEffect(() => {
     const id = setTimeout(onDismiss, 10_000)
     return () => clearTimeout(id)
+  }, [])
+
+  // This fires automatically (rapid-tapping, long inactivity) at exactly the
+  // moment someone is frustrated or lost — read it aloud rather than relying
+  // on her to notice and read the card herself.
+  useEffect(() => {
+    const t = setTimeout(() => speak('Take a breath — everything is fine.'), 300)
+    return () => { clearTimeout(t); stopSpeaking() }
   }, [])
 
   return (

@@ -1043,7 +1043,10 @@ async function openChat(roomId) {
   document.getElementById('typing-indicator').textContent = '';
 
   try {
-    const res      = await fetch(`/api/messages/${roomId}`);
+    const res      = await fetch(`/api/messages/${roomId}`, {
+      headers: { 'x-jean-pin': jeanPin }
+    });
+    if (!res.ok) throw new Error('Failed to load messages: ' + res.status);
     const messages = await res.json();
 
     if (messages.length === 0) {
@@ -1062,6 +1065,8 @@ async function openChat(roomId) {
     }
   } catch (err) {
     console.error('Failed to load messages:', err);
+    document.getElementById('messages').innerHTML =
+      '<div style="text-align:center; color:#9CA3AF; font-size:16px; padding: 30px 20px;">Could not load older messages.<br>Check your connection and reopen this chat.</div>';
   }
 
   scrollToBottom();

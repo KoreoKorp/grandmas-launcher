@@ -10,6 +10,7 @@ import ActivityLog from './components/ActivityLog'
 import ConfigRestore from './components/ConfigRestore'
 import GamesSettings from './components/GamesSettings'
 import PhotosSettings from './components/PhotosSettings'
+import TVSettings from './components/TVSettings'
 import SetupWizard from './components/SetupWizard'
 import CaregiverHandoff from './components/CaregiverHandoff'
 import AIDailyDigest from './components/AIDailyDigest'
@@ -42,6 +43,7 @@ const SECTIONS = [
       { id: 'weather', label: 'Weather' },
       { id: 'games',   label: 'Games' },
       { id: 'photos',  label: 'Photos' },
+      { id: 'tv',      label: 'TV Remote' },
     ]
   },
   {
@@ -297,6 +299,12 @@ export default function App() {
             <PhotosSettings
               photos={config.photos}
               onSave={p => save('photos', { ...config.photos, ...p })}
+            />
+          )}
+          {activeTab === 'tv' && (
+            <TVSettings
+              tv={config.tv}
+              onSave={t => save('tv', { ...config.tv, ...t })}
             />
           )}
           {activeTab === 'confusion' && (
