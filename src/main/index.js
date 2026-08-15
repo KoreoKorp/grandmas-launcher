@@ -7,7 +7,7 @@ import { io } from 'socket.io-client'
 import { createWindows, expandLauncher } from './windows.js'
 import { registerIPC, setWindows, forceGoHome, setupLauncherPermissions, setSignalEmitter, closeEmbeddedBrowser } from './ipc.js'
 import { fetchWeather } from './weather.js'
-import { store, logActivity } from './store.js'
+import { store, logActivity, getSecret, migrateSecretsAtRest } from './store.js'
 import { initMessengerServer, getMessengerUrl, stopMessengerServer } from './serverManager.js'
 import { startHeartbeat, registerWatchdogTask, writeHeartbeat } from './watchdog.js'
 import { initAdBlocker } from './adBlocker.js'
@@ -33,6 +33,11 @@ app.on('second-instance', () => {
 })
 
 app.whenReady().then(async () => {
+  // Must run first: safeStorage (used to encrypt secrets at rest) is only
+  // safe to call after this point, and initMessengerServer() right below
+  // reads secrets that need to already be migrated/decryptable.
+  migrateSecretsAtRest()
+
   await initMessengerServer()
 
   registerIPC()
@@ -82,7 +87,7 @@ function setupSignaling() {
   if (!url) return
 
   const deviceId = store.get('deviceId')
-  const authToken = store.get('authToken')
+  const authToken = getSecret('authToken')
 
   socket = io(url, {
     reconnection: true,
@@ -150,8 +155,32 @@ function setupSignaling() {
 const REMOTE_SYNCED_KEYS = ['tiles', 'dailyNote', 'reminders']
 let isSyncing = false
 
+// A tile pushed from the remote config is only safe if it either opens
+// http(s) content or is a known built-in view — 'app' spawns an arbitrary
+// executable path and 'call' jumps into a specific contact's chat, neither
+// of which an unauthenticated, unpinned remote JSON source should be able
+// to dictate. This closes the gap where {type:'app', target:'C:\...\evil.exe'}
+// would previously pass the old id/label-only shape check and get spawned
+// by launcher:launch-app the next time Jean tapped the tile.
+const SAFE_REMOTE_TILE_TYPES = new Set(['web', 'built-in'])
+
+function isSafeRemoteTile(t) {
+  if (!t || typeof t.id !== 'string' || typeof t.label !== 'string') return false
+  if (!SAFE_REMOTE_TILE_TYPES.has(t.type)) return false
+  if (t.type === 'web') {
+    if (typeof t.target !== 'string') return false
+    try {
+      const protocol = new URL(t.target).protocol
+      if (protocol !== 'http:' && protocol !== 'https:') return false
+    } catch {
+      return false
+    }
+  }
+  return true
+}
+
 const REMOTE_VALIDATORS = {
-  tiles:     (v) => Array.isArray(v) && v.every(t => t && typeof t.id === 'string' && typeof t.label === 'string'),
+  tiles:     (v) => Array.isArray(v) && v.every(isSafeRemoteTile),
   dailyNote: (v) => typeof v === 'string',
   reminders: (v) => Array.isArray(v)
 }
@@ -161,6 +190,16 @@ async function syncRemoteConfig() {
   isSyncing = true
   const url = store.get('remoteConfig.url')
   if (!url) { isSyncing = false; return }
+  // This fetch runs unauthenticated over whatever network the kiosk is on —
+  // http:// would make the tile/reminder payload trivially tamperable by
+  // anyone on the same network (open wifi, a compromised router). This
+  // doesn't establish trust in the destination itself (no cert pinning),
+  // just rules out the "no encryption at all" case.
+  if (!/^https:\/\//i.test(url)) {
+    logActivity('remote-config-sync-failed', 'Refusing non-https remote config URL')
+    isSyncing = false
+    return
+  }
 
   try {
     logActivity('remote-config-sync-attempt', url)
@@ -325,21 +364,36 @@ function setupAutoStart() {
 }
 
 function registerElevatedScheduledTask() {
-  const exePath = process.execPath.replace(/\\/g, '\\\\')
   const taskName = "Grandmas Launcher"
+  // PowerShell single-quoted strings need an embedded ' doubled to '' — the
+  // previous version skipped this and passed process.execPath through
+  // completely unescaped inside a '...' literal. Since this app's own
+  // product name is "Grandma's Launcher", the default install path contains
+  // exactly that character (e.g. "...\Grandma's Launcher\Grandma's
+  // Launcher.exe"), which would terminate the string early and break the
+  // whole script — this task registration likely never actually succeeded
+  // in production.
+  const exePathEscaped = process.execPath.replace(/'/g, "''")
 
   // Create a scheduled task that runs at login with highest privileges (no UAC)
-  const ps = `$action = New-ScheduledTaskAction -Execute '${process.execPath}'
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-$principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -RunLevel Highest -LogonType Interactive
-Register-ScheduledTask -TaskName "${taskName}" -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force`
+  const ps = [
+    `$action = New-ScheduledTaskAction -Execute '${exePathEscaped}'`,
+    '$trigger = New-ScheduledTaskTrigger -AtLogOn',
+    '$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries',
+    '$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -RunLevel Highest -LogonType Interactive',
+    `Register-ScheduledTask -TaskName '${taskName}' -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force`
+  ].join('\n')
 
-  exec(`powershell -NonInteractive -Command "${ps.replace(/"/g, '\\"')}"`, (err) => {
+  // -EncodedCommand (Base64 UTF-16LE) sidesteps shell/PowerShell quoting
+  // entirely — same reasoning as the volume-enforcement script above.
+  const encoded = Buffer.from(ps, 'utf16le').toString('base64')
+  exec(`powershell -NonInteractive -WindowStyle Hidden -EncodedCommand ${encoded}`, (err) => {
     if (!err) {
       // Remove the old login item (replaced by scheduled task)
       app.setLoginItemSettings({ openAtLogin: false })
       store.set('scheduledTaskCreated', true)
+    } else {
+      console.error('[auto-start] scheduled task registration failed:', err.message)
     }
   })
 }
@@ -460,7 +514,7 @@ Power: ${isOnBattery ? 'Battery' : 'AC Plugged In'}`
       logActivity('boot-health-report-generated', reportMsg.replace(/\n/g, ' | '))
 
       const url           = getMessengerUrl()
-      const adminPassword = store.get('messenger.adminPassword') || ''
+      const adminPassword = getSecret('messenger.adminPassword') || ''
       if (!url) return
 
       await fetch(`${url}/send-sys-report`, {

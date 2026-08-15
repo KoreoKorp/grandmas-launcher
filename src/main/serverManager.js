@@ -1,7 +1,7 @@
 import { app }      from 'electron'
 import path          from 'path'
 import net           from 'net'
-import { store, logActivity } from './store.js'
+import { store, logActivity, getSecret, decryptSecret } from './store.js'
 import { startServer } from './messengerServer.js'
 
 let serverInstance = null
@@ -36,18 +36,18 @@ export async function initMessengerServer() {
     dataDir,
     publicDir,
     port,
-    jeanPin:           store.get('messenger.jeanPin')             || '',
-    adminPassword:     store.get('messenger.adminPassword')       || '',
-    launcherAuthToken: store.get('authToken')                     || '',
+    jeanPin:           getSecret('messenger.jeanPin')             || '',
+    adminPassword:     getSecret('messenger.adminPassword')       || '',
+    launcherAuthToken: getSecret('authToken')                     || '',
     discordWebhookUrl: store.get('messenger.discordWebhookUrl')   || '',
     turn: {
       url:        messenger.webrtc?.turnUrl        || '',
       username:   messenger.webrtc?.turnUsername   || '',
-      credential: messenger.webrtc?.turnCredential || ''
+      credential: decryptSecret(messenger.webrtc?.turnCredential) || ''
     },
     twilio: {
       accountSid:     store.get('messenger.twilioAccountSid')    || '',
-      authToken:      store.get('messenger.twilioAuthToken')     || '',
+      authToken:      getSecret('messenger.twilioAuthToken')     || '',
       from:           store.get('messenger.twilioFrom')          || '',
       caregiverPhone: store.get('messenger.caregiverPhone')      || ''
     }
@@ -55,8 +55,17 @@ export async function initMessengerServer() {
 
   activePort = port
   // Heal on boot: make sure every launcher contact with a slug exists on the
-  // messenger server (they live in separate stores and can fall out of sync)
-  serverInstance.syncContacts(store.get('contacts') || [])
+  // messenger server (they live in separate stores and can fall out of sync).
+  // Contacts read from the store carry encrypted pin/messengerPin — decrypt
+  // before handing to syncContacts, which uses messengerPin as the literal
+  // PIN family members type to authenticate; syncing the ciphertext would
+  // silently break everyone's chat PIN on every restart.
+  const storedContacts = (store.get('contacts') || []).map(c => ({
+    ...c,
+    pin: decryptSecret(c.pin),
+    messengerPin: decryptSecret(c.messengerPin)
+  }))
+  serverInstance.syncContacts(storedContacts)
 
   if (port !== preferredPort) {
     // Do NOT persist a drifted port: the Cloudflare tunnel origin is pinned to

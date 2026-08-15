@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('launcher', {
   sendHelpNotification: () => ipcRenderer.send('launcher:send-help-notification'),
   launchApp: (path) => ipcRenderer.invoke('launcher:launch-app', { path }),
   logActivity: (type, detail = '') => ipcRenderer.send('launcher:log-activity', { type, detail }),
+  dismissReminder: (id) => ipcRenderer.send('launcher:dismiss-reminder', { id }),
   getMusic: () => ipcRenderer.invoke('launcher:get-music'),
   getLocalGames: () => ipcRenderer.invoke('launcher:get-local-games'),
   getLocalPhotos: () => ipcRenderer.invoke('launcher:get-local-photos'),
@@ -25,7 +26,7 @@ contextBridge.exposeInMainWorld('launcher', {
   // TV Remote
   tvGetStatus: () => ipcRenderer.invoke('launcher:tv-get-status'),
   tvDiscover: () => ipcRenderer.invoke('launcher:tv-discover'),
-  tvStartPairing: (ip) => ipcRenderer.invoke('launcher:tv-start-pairing', { ip }),
+  tvStartPairing: (ip, name, model) => ipcRenderer.invoke('launcher:tv-start-pairing', { ip, name, model }),
   tvCompletePairing: (pin) => ipcRenderer.invoke('launcher:tv-complete-pairing', { pin }),
   tvPowerOn: () => ipcRenderer.invoke('launcher:tv-power-on'),
   tvPowerOff: () => ipcRenderer.invoke('launcher:tv-power-off'),

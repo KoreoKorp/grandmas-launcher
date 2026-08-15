@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import BuddyMascot from './BuddyMascot'
 
 /**
@@ -18,19 +18,27 @@ export default function BuddyFloat({ onClick, hasUnread }) {
     "How can I help?"
   ]
 
+  // The "hide after 5s" timeouts below weren't tracked, so unmounting mid-hint
+  // (e.g. she taps a tile right as a bubble appears) couldn't cancel them —
+  // they'd still fire setShowHint(false) on an unmounted component. This ref
+  // always points at whichever hide-timer is currently pending.
+  const hideTimerRef = useRef(null)
+
   // Show a hint bubble every 60 seconds
   useEffect(() => {
-    const interval = setInterval(() => {
-      setHintText(hints[Math.floor(Math.random() * hints.length)])
+    function showHintFor(text) {
+      setHintText(text)
       setShowHint(true)
-      setTimeout(() => setShowHint(false), 5000)
+      clearTimeout(hideTimerRef.current)
+      hideTimerRef.current = setTimeout(() => setShowHint(false), 5000)
+    }
+    const interval = setInterval(() => {
+      showHintFor(hints[Math.floor(Math.random() * hints.length)])
     }, 60000)
     const initial = setTimeout(() => {
-      setHintText("Hi! Tap me if you need anything!")
-      setShowHint(true)
-      setTimeout(() => setShowHint(false), 5000)
+      showHintFor("Hi! Tap me if you need anything!")
     }, 10000)
-    return () => { clearInterval(interval); clearTimeout(initial) }
+    return () => { clearInterval(interval); clearTimeout(initial); clearTimeout(hideTimerRef.current) }
   }, [])
 
   return (

@@ -31,6 +31,16 @@ export default function TVView({ onBack, onHelp }) {
     checkPowerState()
   }, [])
 
+  // Pairing can change from the admin panel while this view is open (e.g.
+  // the caregiver clears/completes pairing remotely) — without this, her
+  // paired status here goes stale and paired-only controls stay visible.
+  useEffect(() => {
+    const cleanup = window.launcher.onConfigUpdated(() => {
+      window.launcher.tvGetStatus().then(setTvStatus)
+    })
+    return cleanup
+  }, [])
+
   const checkPowerState = async () => {
     try {
       const { power } = await window.launcher.tvGetPower()
@@ -55,11 +65,15 @@ export default function TVView({ onBack, onHelp }) {
     try {
       await action()
       showFeedback(successMsg)
-      setTimeout(checkPowerState, 500)
     } catch (err) {
       showFeedback('Try again in a moment')
+    } finally {
+      // Re-check real power state whether the command succeeded or failed —
+      // otherwise a failed "Turn On" leaves the optimistic setPowerOn(true)
+      // in handlePowerToggle showing "Turn Off" for a TV that never turned on.
+      setTimeout(checkPowerState, 500)
+      setIsLoading(false)
     }
-    setIsLoading(false)
   }, [showFeedback])
 
   const handlePowerToggle = () => {

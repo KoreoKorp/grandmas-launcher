@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 
 function newLocation() {
-  return { id: Date.now().toString(), name: '' }
+  return { id: crypto.randomUUID(), name: '' }
 }
 
 export default function WeatherSettings({ weather, onSave }) {

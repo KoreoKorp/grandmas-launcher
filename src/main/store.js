@@ -1,5 +1,6 @@
 import Store from 'electron-store'
 import { existsSync } from 'fs'
+import { safeStorage } from 'electron'
 
 const defaults = {
   tiles: [
@@ -101,6 +102,177 @@ const defaults = {
 
 export const store = new Store({ defaults })
 
+// admin:set (ipc.js) accepts a free-form { key, value } pair — reachable not
+// just from the admin UI's own hardcoded save() calls but also from
+// CaregiverHandoff's import flow, which writes every top-level key found in
+// an imported JSON file. That file can come from another machine or another
+// person, so nothing about its shape is trusted; without this, a crafted or
+// corrupted handoff file could inject arbitrary keys into the store (e.g. a
+// bogus remoteConfig.url, or clobbering the internal activityLog/
+// configHistory/deviceId/authToken that no legitimate save ever targets).
+// This restricts writes to the actual configurable top-level settings.
+const SETTABLE_TOP_LEVEL_KEYS = new Set(
+  Object.keys(defaults).filter(k => k !== 'activityLog' && k !== 'configHistory')
+)
+
+export function isSettableKey(key) {
+  return SETTABLE_TOP_LEVEL_KEYS.has(String(key).split('.')[0])
+}
+
+// ── Secrets at rest ──────────────────────────────────────────────────────
+// electron-store persists to a plain JSON file — by default every credential
+// (admin password, Jean's PIN, Twilio token, TURN credential, OpenRouter key,
+// per-contact PINs) sat there in clear text, readable by anything with disk
+// access to this machine. safeStorage encrypts with the OS keychain (DPAPI
+// on Windows), so the ciphertext is only decryptable under the same Windows
+// user account it was encrypted under — fine for this app's one-kiosk-PC
+// model, but means a copied store.json (or a config backup restored onto a
+// different Windows profile) won't decrypt there.
+//
+// Encrypted values are stored as `enc1:<base64>` so already-encrypted values
+// are recognizable (and left alone — encryptSecret no-ops on that prefix,
+// making the startup migration below idempotent) and distinguishable from
+// legacy plaintext left over from before this existed.
+const SECRET_PREFIX = 'enc1:'
+
+function encryptSecret(plain) {
+  if (!plain || typeof plain !== 'string') return plain
+  if (plain.startsWith(SECRET_PREFIX)) return plain
+  if (!safeStorage.isEncryptionAvailable()) return plain // no OS keychain — fall back to plaintext rather than crash
+  return SECRET_PREFIX + safeStorage.encryptString(plain).toString('base64')
+}
+
+function decryptSecret(value) {
+  if (!value || typeof value !== 'string') return value
+  if (!value.startsWith(SECRET_PREFIX)) return value // legacy plaintext, or encryption was unavailable when saved
+  try {
+    return safeStorage.decryptString(Buffer.from(value.slice(SECRET_PREFIX.length), 'base64'))
+  } catch (err) {
+    // Most likely: this blob was encrypted under a different Windows user
+    // account (profile recreated, store.json copied to another machine).
+    // Fail closed — an empty credential just fails auth, which is safe;
+    // throwing would crash whatever screen tried to read it.
+    console.error('[store] failed to decrypt a secret:', err.message)
+    return ''
+  }
+}
+
+// Dot-paths holding sensitive values. Deliberately excludes things that
+// aren't really secret even though they live next to secrets (phone
+// numbers, the Discord webhook URL, the Twilio account SID/from-number,
+// TURN username) — those stay in plain JSON.
+const SECRET_PATHS = [
+  'adminPin',
+  'authToken',
+  'messenger.adminPassword',
+  'messenger.jeanPin',
+  'messenger.twilioAuthToken',
+  'messenger.webrtc.turnCredential',
+  'ai.openrouterKey'
+]
+
+export function getSecret(path) {
+  return decryptSecret(store.get(path))
+}
+
+// For call sites that already have an object containing a secret field from
+// a bulk store.get() (e.g. `store.get('messenger').webrtc.turnCredential`)
+// and would otherwise need a redundant second store.get() through getSecret.
+export { decryptSecret }
+
+export function setSecret(path, value) {
+  store.set(path, encryptSecret(value))
+}
+
+// Given a whole value about to be written under `key` via the generic
+// admin:set handler, encrypt whichever of its fields are secret paths
+// relative to that key. Values arrive here as fresh plaintext straight from
+// an admin-panel input, so this is the only place that needs to apply
+// encryptSecret when writing — reads are decrypted individually via
+// getSecret/decryptSecret at their call sites instead.
+export function encryptSecretsForKey(key, value) {
+  if (key === 'messenger' && value && typeof value === 'object') {
+    return {
+      ...value,
+      adminPassword: encryptSecret(value.adminPassword),
+      jeanPin: encryptSecret(value.jeanPin),
+      twilioAuthToken: encryptSecret(value.twilioAuthToken),
+      webrtc: value.webrtc ? { ...value.webrtc, turnCredential: encryptSecret(value.webrtc.turnCredential) } : value.webrtc
+    }
+  }
+  if (key === 'adminPin' || key === 'ai.openrouterKey') {
+    return encryptSecret(value)
+  }
+  if (key === 'contacts' && Array.isArray(value)) {
+    return value.map(c => ({ ...c, pin: encryptSecret(c.pin), messengerPin: encryptSecret(c.messengerPin) }))
+  }
+  return value
+}
+
+// Decrypted copy of the full store, for admin:get-config — the admin panel
+// pre-fills editable inputs (Twilio/TURN fields, etc.) directly from this,
+// so it needs real values back, not ciphertext. Only the on-disk JSON stays
+// encrypted; the trusted admin renderer sees plaintext same as before.
+export function getDecryptedStore() {
+  const raw = store.store
+  return {
+    ...raw,
+    adminPin: decryptSecret(raw.adminPin),
+    authToken: decryptSecret(raw.authToken),
+    messenger: raw.messenger ? {
+      ...raw.messenger,
+      adminPassword: decryptSecret(raw.messenger.adminPassword),
+      jeanPin: decryptSecret(raw.messenger.jeanPin),
+      twilioAuthToken: decryptSecret(raw.messenger.twilioAuthToken),
+      webrtc: raw.messenger.webrtc ? { ...raw.messenger.webrtc, turnCredential: decryptSecret(raw.messenger.webrtc.turnCredential) } : raw.messenger.webrtc
+    } : raw.messenger,
+    ai: raw.ai ? { ...raw.ai, openrouterKey: decryptSecret(raw.ai.openrouterKey) } : raw.ai,
+    contacts: (raw.contacts || []).map(c => ({ ...c, pin: decryptSecret(c.pin), messengerPin: decryptSecret(c.messengerPin) }))
+  }
+}
+
+// One-time-per-launch migration: re-encrypt any secret still sitting in
+// plaintext from before this existed. Idempotent — encryptSecret no-ops on
+// values already carrying the enc1: prefix — so this is safe to run on
+// every startup rather than needing its own migration flag.
+//
+// This must NOT run at module-load time: safeStorage.encryptString/
+// decryptString are only safe to call after Electron's `app` has emitted
+// `ready` (calling earlier can throw or silently misbehave depending on
+// platform). Everything else in this file that runs at module load only
+// touches plain electron-store values, so it's unaffected — only this
+// function is deferred, and only this function may call encryptSecret/
+// decryptSecret before this runs. index.js calls this as the first thing
+// inside app.whenReady(), before initMessengerServer() (which needs
+// getSecret() to already return real decrypted/migrated values).
+export function migrateSecretsAtRest() {
+  for (const path of SECRET_PATHS) {
+    const raw = store.get(path)
+    if (raw && typeof raw === 'string' && !raw.startsWith(SECRET_PREFIX)) {
+      store.set(path, encryptSecret(raw))
+    }
+  }
+  const contacts = store.get('contacts') || []
+  let changed = false
+  const migrated = contacts.map(c => {
+    const pinNeedsEnc = c.pin && !String(c.pin).startsWith(SECRET_PREFIX)
+    const msgPinNeedsEnc = c.messengerPin && !String(c.messengerPin).startsWith(SECRET_PREFIX)
+    if (!pinNeedsEnc && !msgPinNeedsEnc) return c
+    changed = true
+    return {
+      ...c,
+      pin: pinNeedsEnc ? encryptSecret(c.pin) : c.pin,
+      messengerPin: msgPinNeedsEnc ? encryptSecret(c.messengerPin) : c.messengerPin
+    }
+  })
+  if (changed) store.set('contacts', migrated)
+  // authToken is created here (not at module load) for the same reason —
+  // it's the one other safeStorage-touching write outside this function.
+  if (!store.get('authToken')) {
+    setSecret('authToken', crypto.randomUUID())
+  }
+}
+
 export function saveBackup() {
   const history = store.get('configHistory') || []
   const currentState = store.store
@@ -120,6 +292,11 @@ export function restoreBackup(index) {
   if (history[index]) {
     const state = history[index].state
     for (const key in state) {
+      // Backups only ever come from this app's own saveBackup() snapshots,
+      // so this isn't reachable with untrusted data today — but skip
+      // anything outside the known settings anyway rather than assume that
+      // stays true forever.
+      if (!isSettableKey(key)) continue
       store.set(key, state[key])
     }
     logActivity('config-restored', `Restored backup index ${index}`)
@@ -132,10 +309,8 @@ export function restoreBackup(index) {
 if (!store.get('deviceId')) {
   store.set('deviceId', crypto.randomUUID())
 }
-// Shared secret for call authentication (server must validate both)
-if (!store.get('authToken')) {
-  store.set('authToken', crypto.randomUUID())
-}
+// authToken (shared secret for call authentication) is created inside
+// migrateSecretsAtRest() instead of here — see that function's comment for why.
 
 // Remove ghost tiles — web tiles saved with an empty target URL that survived
 // earlier builds. electron-store persists across installs so these never
@@ -212,14 +387,6 @@ if (!weather.locations) {
   }
 }
 
-// Ensure AI helper tile exists on every launch
-{
-  const currentTiles = store.get('tiles')
-  if (!currentTiles.find(t => t.id === 'ai-helper')) {
-    store.set('tiles', insertTileBeforePhotos(currentTiles, { id: 'ai-helper', type: 'built-in', icon: '🤖', label: 'Ask AI', target: 'ai-helper' }))
-  }
-}
-
 // Insert a tile just before the first built-in tile (Photos) so tiles migrated
 // onto existing installs land in the same spot as on fresh installs, instead of
 // being appended after everything. Falls back to appending if Photos is gone.
@@ -236,6 +403,7 @@ function insertTileBeforePhotos(tiles, tile) {
 // Tile definitions are sourced from `defaults.tiles` to avoid duplication.
 // Bermuda News runs before Sixty and Me so their relative order matches defaults.
 for (const [tileId, migrationFlag] of [
+  ['ai-helper',     'aiTileAdded'],
   ['bermuda-news',  'bermudaNewsTileAdded'],
   ['sixty-and-me',  'sixtyAndMeTileAdded'],
   ['mental-floss',  'mentalFlossTileAdded'],

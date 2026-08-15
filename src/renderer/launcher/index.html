@@ -3,6 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      script-src has no 'unsafe-inline' — this shell only ever loads its own
+      bundled JS via <script src>, no inline script tags, so it doesn't need
+      the exception the messenger HTML pages (served separately) do.
+      img-src/media-src/connect-src allow http://localhost:* for the embedded
+      messenger server (Family Radio clips, WebRTC signaling); frame-src is
+      scoped to Google Photos for the Photos tile's shared-album iframe.
+      This CSP governs this window's own document only — websites opened from
+      tiles load in a separate BrowserView with its own origin/CSP context,
+      untouched by this.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file: http://localhost:*; media-src 'self' data: file: http://localhost:*; connect-src 'self' http://localhost:* ws://localhost:*; frame-src https://photos.google.com https://photos.app.goo.gl; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <title>Grandma's Launcher</title>
   </head>
   <body>

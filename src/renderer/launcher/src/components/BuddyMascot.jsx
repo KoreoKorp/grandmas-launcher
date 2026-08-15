@@ -6,7 +6,6 @@ import React, { useState, useEffect } from 'react'
  */
 export default function BuddyMascot({ state = 'idle', onClick, size = 120 }) {
   const [blinkOpen, setBlinkOpen] = useState(true)
-  const [bobOffset, setBobOffset] = useState(0)
 
   // Blink periodically when idle or talking
   useEffect(() => {
@@ -18,30 +17,16 @@ export default function BuddyMascot({ state = 'idle', onClick, size = 120 }) {
     return () => clearInterval(interval)
   }, [state])
 
-  // Gentle bob animation
-  useEffect(() => {
-    let frame
-    let t = 0
-    const animate = () => {
-      t += 0.03
-      setBobOffset(Math.sin(t) * 3)
-      frame = requestAnimationFrame(animate)
-    }
-    frame = requestAnimationFrame(animate)
-    return () => cancelAnimationFrame(frame)
-  }, [])
-
   const antennaGlow = state === 'thinking'
 
   return (
     <div
       onClick={onClick}
+      className="buddy-bob"
       style={{
         width: size,
         height: size,
         cursor: onClick ? 'pointer' : 'default',
-        transform: `translateY(${bobOffset}px)`,
-        transition: 'transform 0.1s ease',
         position: 'relative'
       }}
     >

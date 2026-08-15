@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('admin', {
   getConfig: () => ipcRenderer.invoke('admin:get-config'),
+  getBootInfo: () => ipcRenderer.invoke('admin:get-boot-info'),
+  verifyPin: (pin) => ipcRenderer.invoke('admin:verify-pin', { pin }),
   set: (key, value) => ipcRenderer.invoke('admin:set', { key, value }),
   getActivityLog: () => ipcRenderer.invoke('admin:get-activity-log'),
   clearActivityLog: () => ipcRenderer.invoke('admin:clear-activity-log'),
@@ -26,7 +28,7 @@ contextBridge.exposeInMainWorld('admin', {
   // TV Remote
   tvGetStatus: () => ipcRenderer.invoke('admin:tv-get-status'),
   tvDiscover: () => ipcRenderer.invoke('admin:tv-discover'),
-  tvStartPairing: (ip) => ipcRenderer.invoke('admin:tv-start-pairing', { ip }),
+  tvStartPairing: (ip, name, model) => ipcRenderer.invoke('admin:tv-start-pairing', { ip, name, model }),
   tvCompletePairing: (pin) => ipcRenderer.invoke('admin:tv-complete-pairing', { pin }),
   tvClearPairing: () => ipcRenderer.invoke('admin:tv-clear-pairing'),
   tvPowerOn: () => ipcRenderer.invoke('admin:tv-power-on'),

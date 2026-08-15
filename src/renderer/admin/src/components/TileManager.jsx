@@ -25,7 +25,10 @@ function isImagePath(icon) {
 }
 
 function emptyTile() {
-  return { id: Date.now().toString(), type: 'web', icon: '🔗', label: '', target: '', kiosk: false }
+  // crypto.randomUUID(), not Date.now() — two "+ Add" clicks landing in the
+  // same millisecond (rare, but not impossible with rapid clicking) would
+  // otherwise create two tiles sharing one id.
+  return { id: crypto.randomUUID(), type: 'web', icon: '🔗', label: '', target: '', kiosk: false }
 }
 
 export default function TileManager({ tiles, onSave }) {
@@ -44,6 +47,15 @@ export default function TileManager({ tiles, onSave }) {
 
   function update(id, field, value) {
     setList(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t))
+  }
+
+  // A plain update('type', ...) would leave the old target in place — a URL
+  // string left over after switching to 'built-in' doesn't match any of its
+  // dropdown options (so it renders unselected, easy to miss) or, worse, a
+  // saved tile with a mismatched type/target combination that silently does
+  // nothing when tapped. Reset target whenever the type actually changes.
+  function changeType(id, newType) {
+    setList(prev => prev.map(t => (t.id === id && t.type !== newType) ? { ...t, type: newType, target: '' } : t))
   }
 
   async function pickImageFor(id) {
@@ -151,7 +163,7 @@ export default function TileManager({ tiles, onSave }) {
             />
             <select
               value={tile.type}
-              onChange={e => update(tile.id, 'type', e.target.value)}
+              onChange={e => changeType(tile.id, e.target.value)}
               style={{ width: 100 }}
             >
               {TILE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}

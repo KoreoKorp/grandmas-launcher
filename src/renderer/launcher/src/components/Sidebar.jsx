@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import SpeakButton from './SpeakButton'
 
 function greeting(name) {
@@ -20,6 +20,12 @@ function formatTime(d) {
 export default function Sidebar({ userName, dailyNote, reminders, weather, onHelpPress }) {
   const [now, setNow] = useState(new Date())
   const [activeReminder, setActiveReminder] = useState(null)
+  // "Got it" persists r.dismissed via IPC (survives restart), but that write
+  // doesn't loop back into this component's `reminders` prop until App.jsx's
+  // next config refetch — without also tracking dismissals locally, the
+  // 60s re-check below would still see the stale (not-yet-dismissed) prop
+  // and pop the same reminder right back up in the same session.
+  const dismissedIdsRef = useRef(new Set())
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000)
@@ -31,7 +37,7 @@ export default function Sidebar({ userName, dailyNote, reminders, weather, onHel
       const n = Date.now()
       for (const r of reminders ?? []) {
         const t = new Date(r.time).getTime()
-        if (Math.abs(n - t) < 60_000 && !r.dismissed) {
+        if (Math.abs(n - t) < 60_000 && !r.dismissed && !dismissedIdsRef.current.has(r.id)) {
           setActiveReminder(r)
           break
         }
@@ -122,6 +128,10 @@ export default function Sidebar({ userName, dailyNote, reminders, weather, onHel
               style={S.dismissBtn}
               onClick={() => {
                 window.launcher.logActivity('reminder-acknowledged', activeReminder.message)
+                if (activeReminder.id != null) {
+                  dismissedIdsRef.current.add(activeReminder.id)
+                  window.launcher.dismissReminder(activeReminder.id)
+                }
                 setActiveReminder(null)
               }}
             >

@@ -1,8 +1,9 @@
 import { ipcMain, shell, BrowserView, dialog, app, nativeImage } from 'electron'
 import { join, dirname, extname } from 'path'
 import { readdir } from 'fs/promises'
+import { existsSync } from 'fs'
 import os from 'os'
-import { store, logActivity, saveBackup, restoreBackup } from './store.js'
+import { store, logActivity, saveBackup, restoreBackup, getSecret, decryptSecret, encryptSecretsForKey, getDecryptedStore, isSettableKey } from './store.js'
 import { fetchWeather, clearWeatherCache } from './weather.js'
 import { expandLauncher } from './windows.js'
 import { getMessengerPort, getMessengerUrl, updateMessengerConfig, syncMessengerContacts, sendHelpAlert } from './serverManager.js'
@@ -100,25 +101,36 @@ export function registerIPC() {
 
   // ── Launcher ──────────────────────────────────────────────────────────────
 
-  ipcMain.handle('launcher:get-config', () => ({
-    tiles: store.get('tiles'),
-    reminders: store.get('reminders'),
-    contacts: store.get('contacts'),
-    dailyNote: store.get('dailyNote'),
-    weather: store.get('weather'),
-    display: store.get('display'),
-    confusion: store.get('confusion'),
-    help: store.get('help'),
-    // Always hand the launcher the live embedded server URL (dynamic port),
-    // not the stored config URL — otherwise the renderer points at the live
-    // domain or a stale port and the in-house messenger never loads.
-    messenger: { ...store.get('messenger'), url: getMessengerUrl() },
-    games: store.get('games'),
-    photos: store.get('photos'),
-    familyRadio: store.get('familyRadio'),
-    userName: store.get('userName'),
-    ai: { available: !!(store.get('ai.openrouterKey') || process.env.OPENROUTER_API_KEY) }
-  }))
+  ipcMain.handle('launcher:get-config', () => {
+    const messenger = store.get('messenger') || {}
+    return {
+      tiles: store.get('tiles'),
+      reminders: store.get('reminders'),
+      contacts: store.get('contacts'),
+      dailyNote: store.get('dailyNote'),
+      weather: store.get('weather'),
+      display: store.get('display'),
+      confusion: store.get('confusion'),
+      help: store.get('help'),
+      // The launcher embeds untrusted web content (Pinterest, news, YouTube),
+      // so it only gets what it actually uses from `messenger`: the live
+      // embedded server URL (dynamic port — not the stored config URL, which
+      // would point at a stale port) and the WebRTC TURN config needed to
+      // answer incoming calls. jeanPin/adminPassword/discordWebhookUrl/Twilio
+      // creds/caregiverPhone never leave the main process toward this window.
+      messenger: {
+        url: getMessengerUrl(),
+        webrtc: messenger.webrtc
+          ? { ...messenger.webrtc, turnCredential: decryptSecret(messenger.webrtc.turnCredential) }
+          : {}
+      },
+      games: store.get('games'),
+      photos: store.get('photos'),
+      familyRadio: store.get('familyRadio'),
+      userName: store.get('userName'),
+      ai: { available: !!(store.get('ai.openrouterKey') || process.env.OPENROUTER_API_KEY) }
+    }
+  })
 
   ipcMain.handle('launcher:get-weather', async () => {
     return await fetchWeather()
@@ -189,12 +201,26 @@ export function registerIPC() {
   })
 
   ipcMain.handle('launcher:launch-app', async (event, { path }) => {
-    // Guard: if the target looks like a URL, open it as a website instead of spawning
-    if (/^https?:\/\//i.test(path) || /^[a-z0-9-]+\.(com|org|net|io|co)/i.test(path)) {
+    // Guard: if the target looks like a URL, open it as a website instead of
+    // spawning. Anchored to the whole string (^...$) and excludes path
+    // separators/drive letters so a Windows path like
+    // "C:\Games\update.com\Game.exe" can't false-positive into this branch —
+    // the old unanchored version matched anywhere in the string.
+    if (/^https?:\/\//i.test(path) || /^[a-z0-9-]+\.(com|org|net|io|co)(\/.*)?$/i.test(path)) {
       const url = path.startsWith('http') ? path : `https://${path}`
       openEmbeddedBrowser(url)
       logActivity('app-redirected-to-web', url)
       return { ok: true }
+    }
+
+    // Sanity gate before spawning anything: the target must actually exist
+    // on disk. Local app/game tiles are caregiver-configured (already a
+    // trusted surface — remote config sync can't push type:'app' tiles, see
+    // isSafeRemoteTile in index.js), so this isn't a security boundary so
+    // much as a guard against a stale or mistyped path silently no-oping.
+    if (!existsSync(path)) {
+      logActivity('app-launch-failed', `${path}: not found`)
+      return { ok: false, error: 'That app could not be found. Ask a family member to check it in the admin panel.' }
     }
 
     const ext = extname(path).toLowerCase()
@@ -241,6 +267,18 @@ export function registerIPC() {
     logActivity(type, detail)
   })
 
+  // Persist that a reminder was dismissed so it doesn't re-pop — Sidebar's
+  // "Got it" only cleared local component state before, so the same
+  // reminder kept reappearing every 60s while its time window was current,
+  // and again on any future launch since nothing was ever saved.
+  ipcMain.on('launcher:dismiss-reminder', (event, { id }) => {
+    const reminders = store.get('reminders') || []
+    const idx = reminders.findIndex(r => r.id === id)
+    if (idx === -1) return
+    reminders[idx] = { ...reminders[idx], dismissed: true }
+    store.set('reminders', reminders)
+  })
+
   ipcMain.handle('launcher:get-music', async () => {
     try {
       const musicPath = app.getPath('music')
@@ -279,7 +317,7 @@ export function registerIPC() {
   }
 
   ipcMain.handle('launcher:ask-ai', async (event, { message }) => {
-    const apiKey = store.get('ai.openrouterKey') || process.env.OPENROUTER_API_KEY
+    const apiKey = getSecret('ai.openrouterKey') || process.env.OPENROUTER_API_KEY
     if (!apiKey) return { error: 'no-key' }
     const model = store.get('ai.model') || 'google/gemini-2.0-flash-001'
     const userName = store.get('userName') || 'Grandma'
@@ -358,7 +396,7 @@ RULES:
     if (!url) return []
     try {
       const res = await fetch(`${url}/api/family-radio/queue`, {
-        headers: { 'x-launcher-token': store.get('authToken') || '' }
+        headers: { 'x-launcher-token': getSecret('authToken') || '' }
       })
       if (!res.ok) return []
       return await res.json()
@@ -374,7 +412,7 @@ RULES:
     try {
       const res = await fetch(`${url}/api/family-radio/${id}/played`, {
         method: 'POST',
-        headers: { 'x-launcher-token': store.get('authToken') || '' }
+        headers: { 'x-launcher-token': getSecret('authToken') || '' }
       })
       return { ok: res.ok }
     } catch (err) {
@@ -421,7 +459,7 @@ RULES:
   // ── Admin ─────────────────────────────────────────────────────────────────
 
   ipcMain.handle('admin:generate-digest', async () => {
-    const apiKey = store.get('ai.openrouterKey') || process.env.OPENROUTER_API_KEY
+    const apiKey = getSecret('ai.openrouterKey') || process.env.OPENROUTER_API_KEY
     if (!apiKey) return { error: 'no-key' }
     const model = store.get('ai.model') || 'poolside/laguna-m.1:free'
     const userName = store.get('userName') || 'Grandma'
@@ -467,7 +505,46 @@ RULES:
     }
   })
 
-  ipcMain.handle('admin:get-config', () => store.store)
+  ipcMain.handle('admin:get-config', () => getDecryptedStore())
+
+  // Minimal, secret-free info the PinGate/first-run check needs before the
+  // caregiver has authenticated. The full admin:get-config (which includes
+  // the real adminPin, Twilio/Discord secrets, etc.) used to be fetched
+  // unconditionally on mount regardless of lock state, so those secrets sat
+  // in renderer memory — readable via DevTools — even while the PIN screen
+  // was still showing. This is called instead, pre-auth; the full config
+  // is only fetched after verify-pin succeeds.
+  ipcMain.handle('admin:get-boot-info', () => ({
+    hasAdminPin: !!getSecret('adminPin'),
+    hasUserName: !!store.get('userName')
+  }))
+
+  // PIN comparison happens here, not in the renderer — the old PinGate
+  // fetched the whole decrypted config (including the real adminPin) into
+  // the renderer just to compare it locally, which meant the real PIN sat
+  // in renderer memory on every attempt, correct or not, readable by
+  // anyone with DevTools access. This returns only a boolean. Rate-limited
+  // the same way the messenger server's PIN entry already is, since this
+  // is a 4-8 digit PIN a local script could otherwise brute-force quickly.
+  const adminPinAttempts = new Map()
+  ipcMain.handle('admin:verify-pin', (event, { pin }) => {
+    const senderId = event.sender.id
+    const record = adminPinAttempts.get(senderId)
+    const now = Date.now()
+    if (record && now - record.since < 15 * 60 * 1000 && record.count >= 10) {
+      return { ok: false, rateLimited: true }
+    }
+    const realPin = getSecret('adminPin')
+    if (realPin && pin === realPin) {
+      adminPinAttempts.delete(senderId)
+      return { ok: true }
+    }
+    const next = (!record || now - record.since > 15 * 60 * 1000)
+      ? { count: 1, since: now }
+      : { count: record.count + 1, since: record.since }
+    adminPinAttempts.set(senderId, next)
+    return { ok: false }
+  })
 
   ipcMain.handle('admin:test-help-alert', async () => {
     try {
@@ -488,8 +565,19 @@ RULES:
   })
 
   ipcMain.handle('admin:set', (event, { key, value }) => {
+    // CaregiverHandoff's import flow calls this once per top-level key found
+    // in an imported JSON file — a file that can come from another machine
+    // or person, so its shape isn't trusted. Reject anything that isn't a
+    // real configurable setting rather than writing it straight to the store.
+    if (!isSettableKey(key)) {
+      console.warn(`[admin:set] rejected unknown key: ${key}`)
+      return { ok: false, error: `Unknown setting: ${key}` }
+    }
     saveBackup() // Save full config state before applying mutation
-    store.set(key, value)
+    // Encrypt secret fields before they touch disk — `value` itself stays
+    // plaintext for the side-effect calls below (updateMessengerConfig etc.
+    // need the real password/PIN/token the caregiver just typed, not ciphertext).
+    store.set(key, encryptSecretsForKey(key, value))
     // Bust weather cache when location/unit changes so next fetch is fresh
     if (key === 'weather') clearWeatherCache()
     // Apply changed messenger credentials (e.g. a new PIN) to the running
@@ -497,9 +585,15 @@ RULES:
     if (key === 'messenger') updateMessengerConfig(value)
     // Mirror contact slugs/PINs into the messenger server so family links work
     if (key === 'contacts') syncMessengerContacts(value)
-    // Push config update to launcher
+    // Push config update to launcher. Only `key` crosses the IPC boundary —
+    // the launcher renderer embeds untrusted web content, and its one
+    // onConfigUpdated listener already ignores any payload value and re-fetches
+    // through the redacted launcher:get-config handler instead. Sending the
+    // raw value here used to mean any secret write (messenger PIN/Twilio/
+    // Discord, or a bare `ai.openrouterKey` value) got shipped straight into
+    // that renderer's IPC payload even though nothing there ever read it.
     if (launcherWin && !launcherWin.isDestroyed()) {
-      launcherWin.webContents.send('launcher:config-updated', { key, value })
+      launcherWin.webContents.send('launcher:config-updated', { key })
     }
     return { ok: true }
   })
@@ -509,8 +603,8 @@ RULES:
     if (success) {
       applyRestoredConfigSideEffects()
       if (launcherWin && !launcherWin.isDestroyed()) {
-        // Re-send updated config payload to force launcher to re-render changes
-        launcherWin.webContents.send('launcher:config-updated', { key: 'ALL', value: store.store })
+        // Re-fetch, don't push store.store — see the note on admin:set above.
+        launcherWin.webContents.send('launcher:config-updated', { key: 'ALL' })
       }
     }
     return { ok: success }
@@ -526,7 +620,7 @@ RULES:
     if (success) {
       applyRestoredConfigSideEffects()
       if (launcherWin && !launcherWin.isDestroyed()) {
-        launcherWin.webContents.send('launcher:config-updated', { key: 'ALL', value: store.store })
+        launcherWin.webContents.send('launcher:config-updated', { key: 'ALL' })
       }
       if (adminWin && !adminWin.isDestroyed()) {
         adminWin.webContents.send('config:updated')
@@ -592,139 +686,79 @@ RULES:
 
   // ── TV Remote ────────────────────────────────────────────────────────────
 
-  // Load saved TV credentials on startup
+  // Load saved TV credentials (and the name/model discovered when it was
+  // paired) on startup.
   const tvConfig = store.get('tv')
   if (tvConfig?.ip && tvConfig?.token) {
-    tvService.loadCredentials(tvConfig.ip, tvConfig.token)
+    tvService.loadCredentials(tvConfig.ip, tvConfig.token, tvConfig.name, tvConfig.model)
   }
 
-  ipcMain.handle('launcher:tv-get-status', () => {
-    return tvService.getTvStatus()
-  })
+  // Pairing changes the TV's connected/disconnected state out from under
+  // whichever window (launcher or admin) didn't trigger it — e.g. the
+  // caregiver clears pairing from admin while Jean has TVView open. Without
+  // this, her copy of tvStatus goes stale and paired-only controls keep
+  // showing as available. Mirrors the notification admin:set already sends
+  // for every other config change.
+  function notifyLauncherTvChanged() {
+    if (launcherWin && !launcherWin.isDestroyed()) {
+      launcherWin.webContents.send('launcher:config-updated', { key: 'tv' })
+    }
+  }
 
-  ipcMain.handle('launcher:tv-discover', async () => {
-    return await tvService.discoverTVs()
-  })
-
-  ipcMain.handle('launcher:tv-start-pairing', async (_, { ip }) => {
-    return await tvService.startPairing(ip)
-  })
-
-  ipcMain.handle('launcher:tv-complete-pairing', async (_, { pin }) => {
+  async function tvCompletePairing(pin) {
     const result = await tvService.completePairing(pin)
     if (result.success) {
       const status = tvService.getTvStatus()
       store.set('tv.ip', status.ip)
       store.set('tv.token', result.authToken)
+      store.set('tv.name', status.name)
+      store.set('tv.model', status.model)
       store.set('tv.lastConnected', Date.now())
+      notifyLauncherTvChanged()
     }
     return result
-  })
+  }
 
-  ipcMain.handle('launcher:tv-power-on', async () => {
-    return await tvService.powerOn()
-  })
-
-  ipcMain.handle('launcher:tv-power-off', async () => {
-    return await tvService.powerOff()
-  })
-
-  ipcMain.handle('launcher:tv-volume-up', async () => {
-    return await tvService.volumeUp()
-  })
-
-  ipcMain.handle('launcher:tv-volume-down', async () => {
-    return await tvService.volumeDown()
-  })
-
-  ipcMain.handle('launcher:tv-mute', async () => {
-    return await tvService.mute()
-  })
-
-  ipcMain.handle('launcher:tv-channel-up', async () => {
-    return await tvService.channelUp()
-  })
-
-  ipcMain.handle('launcher:tv-channel-down', async () => {
-    return await tvService.channelDown()
-  })
-
-  ipcMain.handle('launcher:tv-set-input', async (_, { input }) => {
-    return await tvService.setInput(input)
-  })
-
-  ipcMain.handle('launcher:tv-launch-app', async (_, { app }) => {
-    return await tvService.launchApp(app)
-  })
-
-  ipcMain.handle('launcher:tv-get-input', async () => {
-    return await tvService.getCurrentInput()
-  })
-
-  ipcMain.handle('launcher:tv-get-power', async () => {
-    return await tvService.getPowerState()
-  })
-
-  ipcMain.handle('launcher:tv-clear-pairing', () => {
+  function tvClearPairing() {
     tvService.clearCredentials()
     store.set('tv.ip', '')
     store.set('tv.token', '')
+    store.set('tv.name', '')
+    store.set('tv.model', '')
     store.set('tv.lastConnected', null)
+    notifyLauncherTvChanged()
     return { ok: true }
-  })
+  }
 
-  // ── TV Remote (Admin) ───────────────────────────────────────────────────
+  // Handlers identical between the launcher and admin panel — both need
+  // basic status/pairing/volume/power control. Registered once under both
+  // IPC prefixes so a future change (like persisting discovered name/model)
+  // can't drift between the two copies the way duplicated handler bodies
+  // previously could.
+  const sharedTvHandlers = {
+    'tv-get-status':       () => tvService.getTvStatus(),
+    'tv-discover':         () => tvService.discoverTVs(),
+    'tv-start-pairing':    (_, { ip, name, model }) => tvService.startPairing(ip, { name, model }),
+    'tv-complete-pairing': (_, { pin }) => tvCompletePairing(pin),
+    'tv-clear-pairing':    () => tvClearPairing(),
+    'tv-power-on':         () => tvService.powerOn(),
+    'tv-power-off':        () => tvService.powerOff(),
+    'tv-volume-up':        () => tvService.volumeUp(),
+    'tv-volume-down':      () => tvService.volumeDown(),
+    'tv-mute':             () => tvService.mute()
+  }
+  for (const [name, handler] of Object.entries(sharedTvHandlers)) {
+    ipcMain.handle(`launcher:${name}`, handler)
+    ipcMain.handle(`admin:${name}`, handler)
+  }
 
-  ipcMain.handle('admin:tv-get-status', () => {
-    return tvService.getTvStatus()
-  })
-
-  ipcMain.handle('admin:tv-discover', async () => {
-    return await tvService.discoverTVs()
-  })
-
-  ipcMain.handle('admin:tv-start-pairing', async (_, { ip }) => {
-    return await tvService.startPairing(ip)
-  })
-
-  ipcMain.handle('admin:tv-complete-pairing', async (_, { pin }) => {
-    const result = await tvService.completePairing(pin)
-    if (result.success) {
-      const status = tvService.getTvStatus()
-      store.set('tv.ip', status.ip)
-      store.set('tv.token', result.authToken)
-      store.set('tv.lastConnected', Date.now())
-    }
-    return result
-  })
-
-  ipcMain.handle('admin:tv-clear-pairing', () => {
-    tvService.clearCredentials()
-    store.set('tv.ip', '')
-    store.set('tv.token', '')
-    store.set('tv.lastConnected', null)
-    return { ok: true }
-  })
-
-  ipcMain.handle('admin:tv-power-on', async () => {
-    return await tvService.powerOn()
-  })
-
-  ipcMain.handle('admin:tv-power-off', async () => {
-    return await tvService.powerOff()
-  })
-
-  ipcMain.handle('admin:tv-volume-up', async () => {
-    return await tvService.volumeUp()
-  })
-
-  ipcMain.handle('admin:tv-volume-down', async () => {
-    return await tvService.volumeDown()
-  })
-
-  ipcMain.handle('admin:tv-mute', async () => {
-    return await tvService.mute()
-  })
+  // Launcher-only: channel/input/app control isn't exposed in the admin panel.
+  ipcMain.handle('launcher:tv-channel-up', () => tvService.channelUp())
+  ipcMain.handle('launcher:tv-channel-down', () => tvService.channelDown())
+  ipcMain.handle('launcher:tv-set-input', (_, { input }) => tvService.setInput(input))
+  ipcMain.handle('launcher:tv-launch-app', (_, { app }) => tvService.launchApp(app))
+  ipcMain.handle('launcher:tv-get-input', () => tvService.getCurrentInput())
+  ipcMain.handle('launcher:tv-get-power', () => tvService.getPowerState())
 
   // ── WebRTC signaling relay ────────────────────────────────────────────────
 
@@ -751,10 +785,25 @@ RULES:
 
 // A restored backup may contain a different messenger PIN or weather location —
 // apply the same side effects admin:set does, or the running server keeps
-// validating against the pre-rollback credentials.
+// validating against the pre-rollback credentials. Backups snapshot the store
+// as-is, so secret fields come back encrypted — updateMessengerConfig and
+// syncMessengerContacts both need the real values (the latter uses
+// messengerPin as the literal PIN family members type to authenticate).
 function applyRestoredConfigSideEffects() {
-  updateMessengerConfig(store.get('messenger') || {})
-  syncMessengerContacts(store.get('contacts') || [])
+  const messenger = store.get('messenger') || {}
+  updateMessengerConfig({
+    ...messenger,
+    adminPassword: decryptSecret(messenger.adminPassword),
+    jeanPin: decryptSecret(messenger.jeanPin),
+    twilioAuthToken: decryptSecret(messenger.twilioAuthToken),
+    webrtc: messenger.webrtc ? { ...messenger.webrtc, turnCredential: decryptSecret(messenger.webrtc.turnCredential) } : messenger.webrtc
+  })
+  const contacts = (store.get('contacts') || []).map(c => ({
+    ...c,
+    pin: decryptSecret(c.pin),
+    messengerPin: decryptSecret(c.messengerPin)
+  }))
+  syncMessengerContacts(contacts)
   clearWeatherCache()
 }
 
@@ -804,6 +853,7 @@ function openEmbeddedBrowser(url, partition = null) {
   const webPreferences = {
     contextIsolation: true,
     nodeIntegration: false,
+    sandbox: true,
     preload: join(__dirname, '../preload/browserView.js')
   }
   if (partition) webPreferences.partition = partition

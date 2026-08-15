@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef } from 'react'
 export default function IncomingCallOverlay({ caller, onAnswer, onDecline }) {
   const autoAnswer = !!caller.autoAnswer
   const [countdown, setCountdown] = useState(3)
-  const answered = useRef(false)
+  const settled = useRef(false)
   // Ref keeps the latest onAnswer without being a countdown-effect dependency —
   // prevents the 3-second interval from restarting on every App.jsx re-render
   const onAnswerRef = useRef(onAnswer)
@@ -35,23 +35,24 @@ export default function IncomingCallOverlay({ caller, onAnswer, onDecline }) {
   // 3-second countdown then auto-answer — but ONLY for contacts the caregiver
   // has explicitly marked trusted (caller.autoAnswer). Everyone else just
   // rings — she taps Answer or Decline herself, same as any other call.
+  //
+  // Split into two effects rather than firing onAnswer from inside the
+  // setCountdown updater: React state updaters are expected to be pure, and
+  // triggering a real side effect (answering a WebRTC call) from inside one
+  // means it can run an extra time under anything that double-invokes
+  // updaters to catch impurities. This effect only ticks the number down;
+  // the one below reacts to it reaching zero.
   useEffect(() => {
     if (!autoAnswer) return
-    const id = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(id)
-          if (!answered.current) {
-            answered.current = true
-            onAnswerRef.current()
-          }
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
+    const id = setInterval(() => setCountdown(prev => Math.max(0, prev - 1)), 1000)
     return () => clearInterval(id)
   }, [autoAnswer])
+
+  useEffect(() => {
+    if (!autoAnswer || countdown > 0 || settled.current) return
+    settled.current = true
+    onAnswerRef.current()
+  }, [autoAnswer, countdown])
 
   return (
     <div style={styles.backdrop}>
@@ -64,10 +65,10 @@ export default function IncomingCallOverlay({ caller, onAnswer, onDecline }) {
           ? <div style={styles.countdown}>Connecting in {countdown}…</div>
           : <div style={styles.countdown}>Tap Answer to talk with them</div>
         }
-        <button style={styles.answerBtn} onClick={() => { answered.current = true; onAnswer() }}>
+        <button style={styles.answerBtn} onClick={() => { settled.current = true; onAnswer() }}>
           Answer Now
         </button>
-        <button style={styles.declineBtn} onClick={onDecline}>
+        <button style={styles.declineBtn} onClick={() => { settled.current = true; onDecline() }}>
           Not Now
         </button>
       </div>

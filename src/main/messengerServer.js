@@ -8,6 +8,21 @@ import { isFamilyRadioEnabled } from './store.js'
 
 // ── Helpers ───────────────────────────────────────────────────
 
+// Plain !== / === on secrets (PINs, passwords, session tokens) leaks timing
+// information — JS string comparison short-circuits at the first mismatched
+// character, so how long a comparison takes can reveal how many leading
+// characters an attacker guessed correctly. crypto.timingSafeEqual runs in
+// constant time for equal-length inputs; lengths differing is treated as an
+// immediate mismatch (length itself isn't the sensitive part here — PIN/
+// token lengths are fixed and effectively public).
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  if (bufA.length !== bufB.length) return false
+  return crypto.timingSafeEqual(bufA, bufB)
+}
+
 function makeDataHelpers(dataDir) {
   const MESSAGES_DIR  = path.join(dataDir, 'messages')
   const CONTACTS_FILE = path.join(dataDir, 'contacts.json')
@@ -266,14 +281,41 @@ export async function startServer(config) {
   // upload path that would need its own auth (see family-radio-upload below).
   const io = new Server(httpServer, { cors: { origin: '*' }, maxHttpBufferSize: 20 * 1024 * 1024 })
 
+  // jean.html/family.html/admin.html each carry one large inline <script>
+  // block and (admin.html) onclick="" attributes, so script-src/style-src
+  // need 'unsafe-inline' — extracting those to external files to drop it is
+  // a separate, larger refactor. This still meaningfully restricts what these
+  // pages can load or connect to: no remote script/frame injection, no
+  // fetching arbitrary third-party domains, no plugins. api.qrserver.com is
+  // allow-listed because admin.html's "QR" button loads a code image from it
+  // (see showQr); everything else these pages need is same-origin.
+  const CSP = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https://api.qrserver.com",
+    "media-src 'self' blob:",
+    "connect-src 'self' ws: wss: stun: turn: turns:",
+    "frame-src 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'"
+  ].join('; ')
+
   expressApp.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key, x-jean-pin, x-session-token')
+    res.setHeader('Content-Security-Policy', CSP)
     if (req.method === 'OPTIONS') return res.sendStatus(204)
     next()
   })
-  expressApp.use(express.json())
+  // Express defaults this to 100kb already, but explicit beats implicit —
+  // 1mb covers every legitimate JSON payload here (contacts, alerts) with
+  // headroom, while still bounding it well below the raised 20MB socket.io
+  // limit used for voice-note/photo uploads, which go over a different path.
+  expressApp.use(express.json({ limit: '1mb' }))
   expressApp.use(express.static(publicDir))
   // Family Radio media is private. The launcher displays it via <img>/<audio>,
   // which cannot send an auth header, so a header-token gate would break the
@@ -290,7 +332,7 @@ export async function startServer(config) {
 
   function requireAdmin(req, res, next) {
     const key = req.headers['x-admin-key']
-    if (!key || key !== adminPassword) return res.status(401).json({ error: 'Unauthorized' })
+    if (!key || !safeEqual(key, adminPassword)) return res.status(401).json({ error: 'Unauthorized' })
     next()
   }
 
@@ -464,15 +506,15 @@ export async function startServer(config) {
     const contact = db.findContact(req.params.id)
     if (!contact) return res.status(404).json({ error: 'Invalid room' })
     // Truthiness guards: an unset credential must never match an empty header
-    const isAdmin  = !!adminPassword && req.headers['x-admin-key']     === adminPassword
-    const isFamily = req.headers['x-session-token'] === contact.sessionToken
-    const isJean   = !!jeanPin       && req.headers['x-jean-pin']      === jeanPin
+    const isAdmin  = !!adminPassword && safeEqual(req.headers['x-admin-key'], adminPassword)
+    const isFamily = safeEqual(req.headers['x-session-token'], contact.sessionToken)
+    const isJean   = !!jeanPin       && safeEqual(req.headers['x-jean-pin'], jeanPin)
     if (!isAdmin && !isFamily && !isJean) return res.status(401).json({ error: 'Unauthorized' })
     res.json(db.getMessages(contact.roomId))
   })
 
   expressApp.get('/api/jean/rooms', (req, res) => {
-    if (!jeanPin || req.headers['x-jean-pin'] !== jeanPin) return res.status(401).json({ error: 'Unauthorized' })
+    if (!jeanPin || !safeEqual(req.headers['x-jean-pin'], jeanPin)) return res.status(401).json({ error: 'Unauthorized' })
     const rooms = db.getContacts().map(contact => {
       const messages    = db.getMessages(contact.roomId)
       const lastMessage = messages[messages.length - 1] || null
@@ -496,7 +538,7 @@ export async function startServer(config) {
       if (!jeanPin) { socket.emit('auth-error', 'Messages is not set up yet. Please ask your helper to set a PIN in the settings.'); return }
       const clientIP = socketIP(socket)
       if (isPinRateLimited(clientIP)) { socket.emit('auth-error', 'Too many attempts. Please wait 15 minutes and try again.'); return }
-      if (pin !== jeanPin) { recordPinFailure(clientIP); socket.emit('auth-error', 'Wrong PIN. Please try again.'); return }
+      if (!safeEqual(pin, jeanPin)) { recordPinFailure(clientIP); socket.emit('auth-error', 'Wrong PIN. Please try again.'); return }
       if (jeanSocket && jeanSocket.id !== socket.id)
         jeanSocket.emit('session-replaced', "You opened Jean's chat in another window.")
       jeanSocket = socket; socket.isJean = true
@@ -511,10 +553,10 @@ export async function startServer(config) {
 
       if (contact.pin) {
         if (token) {
-          if (token !== contact.sessionToken) { socket.emit('auth-error', 'Your session has expired. Please enter your PIN again.'); return }
+          if (!safeEqual(token, contact.sessionToken)) { socket.emit('auth-error', 'Your session has expired. Please enter your PIN again.'); return }
         } else if (pin) {
           if (isPinRateLimited(clientIP)) { socket.emit('auth-error', 'Too many attempts. Please wait 15 minutes and try again.'); return }
-          if (pin !== contact.pin) { recordPinFailure(clientIP); socket.emit('auth-error', 'Incorrect PIN. Please try again.'); return }
+          if (!safeEqual(pin, contact.pin)) { recordPinFailure(clientIP); socket.emit('auth-error', 'Incorrect PIN. Please try again.'); return }
         } else {
           socket.emit('pin-required'); return
         }
@@ -550,7 +592,10 @@ export async function startServer(config) {
     })
 
     socket.on('admin-connect', ({ password }) => {
-      if (password !== adminPassword) return
+      // Truthiness guard: an unset adminPassword ('') must never match an
+      // empty/unset password from the client — otherwise the default,
+      // pre-setup config grants admin socket access to anyone who connects.
+      if (!adminPassword || !safeEqual(password, adminPassword)) return
       adminSocket = socket; socket.isAdmin = true
       socket.emit('alerts-update', db.getAlerts())
     })
@@ -558,7 +603,7 @@ export async function startServer(config) {
     // Launcher registers using the same authToken stored in electron-store.
     // Since server and launcher share a process, the token always matches — TOFU is bypassed.
     socket.on('register', ({ deviceId, authToken }) => {
-      if (launcherAuthToken && authToken !== launcherAuthToken) {
+      if (launcherAuthToken && !safeEqual(authToken, launcherAuthToken)) {
         socket.emit('auth-error', 'Launcher token mismatch.')
         return
       }

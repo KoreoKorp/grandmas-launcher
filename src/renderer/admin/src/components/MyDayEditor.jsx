@@ -4,7 +4,7 @@ function emptyReminder() {
   const d = new Date()
   d.setMinutes(0, 0, 0)
   d.setHours(d.getHours() + 1)
-  return { id: Date.now().toString(), message: '', time: d.toISOString().slice(0, 16) }
+  return { id: crypto.randomUUID(), message: '', time: d.toISOString().slice(0, 16) }
 }
 
 export default function MyDayEditor({ dailyNote, reminders, userName, help, onSaveNote, onSaveReminders, onSaveName, onSaveHelp }) {

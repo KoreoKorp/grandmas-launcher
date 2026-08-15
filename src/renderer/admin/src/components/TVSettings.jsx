@@ -38,11 +38,11 @@ export default function TVSettings({ tv, onSave }) {
     setDiscovering(false)
   }
 
-  async function startPair(selectedIp) {
+  async function startPair(selectedIp, deviceName, deviceModel) {
     setPairing(true)
     setIp(selectedIp)
     try {
-      const result = await window.admin.tvStartPairing(selectedIp)
+      const result = await window.admin.tvStartPairing(selectedIp, deviceName, deviceModel)
       if (result.success) {
         notify('TV is ready for pairing. Enter the PIN shown on the TV.')
       } else {
@@ -151,7 +151,7 @@ export default function TVSettings({ tv, onSave }) {
                         {device.ip} {device.model ? `• ${device.model}` : ''}
                       </span>
                     </div>
-                    <button className="btn btn-primary" onClick={() => startPair(device.ip)}>
+                    <button className="btn btn-primary" onClick={() => startPair(device.ip, device.name, device.model)}>
                       Pair
                     </button>
                   </div>

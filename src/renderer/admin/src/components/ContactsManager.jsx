@@ -4,7 +4,7 @@ const DEFAULT_MESSAGES = ['Hi, thinking of you!', 'Call me when you can 📞', '
 
 function emptyContact() {
   return {
-    id: Date.now().toString(),
+    id: crypto.randomUUID(), // not Date.now() — two rapid "+ Add" clicks could otherwise collide
     name: '',
     relation: '',
     phone: '',

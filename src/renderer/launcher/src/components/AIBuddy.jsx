@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react'
 import BuddyMascot from './BuddyMascot'
+import { hasTTS, speak as speakText, stopSpeaking as stopSpeechSynthesis } from '../utils/speech'
 
 const hasSpeechRecognition = !!(window.SpeechRecognition || window.webkitSpeechRecognition)
-const hasTTS = !!window.speechSynthesis
 
 export default function AIBuddy({ onClose, onTileOpen, tiles = [] }) {
   const [messages, setMessages] = useState([])
@@ -47,7 +47,7 @@ export default function AIBuddy({ onClose, onTileOpen, tiles = [] }) {
   useEffect(() => {
     return () => {
       recognitionRef.current?.stop()
-      window.speechSynthesis?.cancel()
+      stopSpeechSynthesis()
     }
   }, [])
 
@@ -61,19 +61,16 @@ export default function AIBuddy({ onClose, onTileOpen, tiles = [] }) {
   }
 
   function speak(text) {
-    if (!hasTTS) return
-    window.speechSynthesis.cancel()
-    const utt = new SpeechSynthesisUtterance(text)
-    utt.rate = 0.9
-    utt.pitch = 1.05
-    utt.onstart = () => { setSpeaking(true); setBuddyState('talking') }
-    utt.onend = () => { setSpeaking(false); setBuddyState('idle') }
-    utt.onerror = () => { setSpeaking(false); setBuddyState('idle') }
-    window.speechSynthesis.speak(utt)
+    speakText(text, {
+      rate: 0.9,
+      pitch: 1.05,
+      onStart: () => { setSpeaking(true); setBuddyState('talking') },
+      onEnd: () => { setSpeaking(false); setBuddyState('idle') }
+    })
   }
 
   function stopSpeaking() {
-    window.speechSynthesis?.cancel()
+    stopSpeechSynthesis()
     setSpeaking(false)
     setBuddyState('idle')
   }

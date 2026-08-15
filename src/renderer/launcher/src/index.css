@@ -122,6 +122,18 @@ textarea, input { -webkit-user-select: text; user-select: text; }
   50%       { transform: scale(1.15); box-shadow: 0 2px 10px rgba(229,57,53,0.5); }
 }
 
+/* BuddyMascot's idle bob — was driven by a requestAnimationFrame loop
+   calling setState every frame (~60x/sec), re-rendering the whole SVG tree
+   just to update one translateY value. A CSS animation achieves the same
+   motion without any JS or React re-renders. */
+@keyframes buddyBob {
+  0%, 100% { transform: translateY(-3px); }
+  50%       { transform: translateY(3px); }
+}
+.buddy-bob {
+  animation: buddyBob 3.5s ease-in-out infinite;
+}
+
 /* ── Glass card utility ──────────────────────────────────────── */
 
 .glass-card {

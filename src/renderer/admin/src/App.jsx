@@ -80,8 +80,8 @@ function PinGate({ onUnlock }) {
   function backspace() { setEntry(prev => prev.slice(0, -1)); setError(false) }
 
   async function submit() {
-    const cfg = await window.admin.getConfig()
-    if (entry === cfg.adminPin) {
+    const result = await window.admin.verifyPin(entry)
+    if (result.ok) {
       onUnlock()
     } else {
       setError(true)
@@ -198,19 +198,20 @@ function SideNav({ activeTab, onSelect }) {
 
 export default function App() {
   const [config, setConfig] = useState(null)
+  const [bootInfo, setBootInfo] = useState(null)
   const [unlocked, setUnlocked] = useState(false)
   const [activeTab, setActiveTab] = useState('tiles')
   const [helpAlert, setHelpAlert] = useState(false)
   const [showWizard, setShowWizard] = useState(false)
 
+  // Secret-free boot check only — the full config (real adminPin, Twilio/
+  // Discord secrets, etc.) must not reach the renderer until after she's
+  // authenticated, or it sits in React state readable via DevTools the
+  // whole time the PIN screen is showing.
   useEffect(() => {
-    window.admin.getConfig().then(cfg => {
-      setConfig(cfg)
-      if (!cfg.adminPin) {
-        setUnlocked(true)
-        // First-run: open wizard automatically if name isn't set yet
-        if (!cfg.userName) setShowWizard(true)
-      }
+    window.admin.getBootInfo().then(info => {
+      setBootInfo(info)
+      if (!info.hasAdminPin) setUnlocked(true)
     })
 
     window.admin.onHelpAlert(() => {
@@ -219,6 +220,16 @@ export default function App() {
     })
   }, [])
 
+  // Only fetch the real config once unlocked (immediately, if there's no
+  // PIN at all — see above).
+  useEffect(() => {
+    if (!unlocked) return
+    window.admin.getConfig().then(cfg => {
+      setConfig(cfg)
+      if (!cfg.userName) setShowWizard(true) // first-run
+    })
+  }, [unlocked])
+
   async function save(key, value) {
     await window.admin.set(key, value)
     // Re-fetch config to properly handle nested keys (e.g., 'ai.openrouterKey')
@@ -226,7 +237,7 @@ export default function App() {
     setConfig(cfg)
   }
 
-  if (!config) {
+  if (!bootInfo) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
         Loading...
@@ -236,6 +247,14 @@ export default function App() {
 
   if (!unlocked) {
     return <PinGate onUnlock={() => setUnlocked(true)} />
+  }
+
+  if (!config) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        Loading...
+      </div>
+    )
   }
 
   return (

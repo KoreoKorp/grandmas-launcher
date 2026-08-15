@@ -31,9 +31,18 @@ export default function FamilyRadioOverlay({ enabled, baseUrl }) {
   }, [enabled])
 
   useEffect(() => {
-    if (audioRef.current && queue.length) {
-      audioRef.current.play().catch(() => {})
-    }
+    if (!audioRef.current || !queue.length) return
+    const audio = audioRef.current
+    // This clip arrives via a socket push, with no click/tap preceding it —
+    // Chromium's autoplay policy blocks unmuted play() without a recent user
+    // gesture, which would otherwise leave her staring at a card that never
+    // makes a sound, with only the easy-to-miss "Play Again" button as a way
+    // to notice anything's wrong. Muted playback is always allowed regardless
+    // of policy, so start muted and unmute the instant play() actually starts —
+    // a self-contained trick that doesn't need any app-wide policy override
+    // (which would also unmute ad video/audio on every embedded website tile).
+    audio.muted = true
+    audio.play().then(() => { audio.muted = false }).catch(() => {})
   }, [queue[0]?.id])
 
   if (!enabled || queue.length === 0) return null

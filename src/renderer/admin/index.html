@@ -3,6 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      No 'unsafe-inline' for scripts — this shell only loads its own bundled
+      JS via <script src>. img-src includes file: for locally-picked tile/
+      contact photos (see admin:pick-image) and http://localhost:* for the
+      embedded messenger server's health-check fetch (MessengerSettings).
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file: http://localhost:*; connect-src 'self' http://localhost:* ws://localhost:*; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <title>Grandma's Launcher — Admin</title>
   </head>
   <body>

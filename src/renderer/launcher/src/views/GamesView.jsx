@@ -1,5 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react'
 
+// Mirrors main/ipc.js's isSafeNavigationProtocol — the <webview> tag runs in
+// its own guest process, so the main-process BrowserView guards (will-navigate/
+// will-redirect preventDefault) don't apply here; this is the renderer-side
+// equivalent used to catch ad content trying to hand off to file://, a custom
+// protocol, or another OS-level scheme instead of staying on http(s).
+function isSafeNavigationProtocol(targetUrl) {
+  try {
+    const protocol = new URL(targetUrl).protocol
+    return (
+      protocol === 'http:' ||
+      protocol === 'https:' ||
+      protocol === 'about:' ||
+      protocol === 'blob:' ||
+      protocol === 'data:'
+    )
+  } catch {
+    return false
+  }
+}
+
 export default function GamesView({ gamesConfig, onBack, onHelp }) {
   const [tab, setTab] = useState('local')
   const [localGames, setLocalGames] = useState([])
@@ -10,7 +30,9 @@ export default function GamesView({ gamesConfig, onBack, onHelp }) {
   const onlineUrl = gamesConfig?.onlineUrl || 'https://www.pogo.com'
 
   useEffect(() => {
+    let cancelled = false
     window.launcher.getLocalGames().then(games => {
+      if (cancelled) return
       setLocalGames(games)
       // Load all .exe icons in parallel
       Promise.all(
@@ -18,21 +40,53 @@ export default function GamesView({ gamesConfig, onBack, onHelp }) {
           window.launcher.getGameIcon(g.path).then(url => [g.path, url])
         )
       ).then(pairs => {
+        if (cancelled) return
         const map = {}
         pairs.forEach(([path, url]) => { if (url) map[path] = url })
         setIcons(map)
       })
     })
+    return () => { cancelled = true }
   }, [])
 
-  // Electron webview fires custom DOM events — React JSX props can't wire them up
+  // Electron webview fires custom DOM events — React JSX props can't wire them up.
+  // This effect used to run once while the default 'local' tab was active, so
+  // by the time the user switched to 'online' the webview element hadn't
+  // mounted yet and this listener was never attached — the Online tab stayed
+  // on "Loading…" forever. Depend on `tab` so it (re-)attaches once the
+  // webview actually exists in the DOM.
   useEffect(() => {
+    if (tab !== 'online') return
     const wv = webviewRef.current
     if (!wv) return
+
     const onLoad = () => setBrowserLoaded(true)
     wv.addEventListener('did-finish-load', onLoad)
-    return () => wv.removeEventListener('did-finish-load', onLoad)
-  }, [])
+
+    // Last URL we know was safe to be on — used to recover if navigation
+    // tries to hand off to something outside http(s).
+    let lastSafeUrl = onlineUrl
+    const onNavigate = (e) => {
+      if (isSafeNavigationProtocol(e.url)) {
+        lastSafeUrl = e.url
+      } else {
+        window.launcher.logActivity('escape-attempt-blocked', e.url)
+        wv.stop()
+        wv.loadURL(lastSafeUrl)
+      }
+    }
+    // <webview>'s will-navigate/will-redirect can't preventDefault() the way
+    // BrowserView's can (Electron limitation) — this reacts by stopping and
+    // reloading the last safe URL instead of blocking pre-emptively.
+    wv.addEventListener('will-navigate', onNavigate)
+    wv.addEventListener('will-redirect', onNavigate)
+
+    return () => {
+      wv.removeEventListener('did-finish-load', onLoad)
+      wv.removeEventListener('will-navigate', onNavigate)
+      wv.removeEventListener('will-redirect', onNavigate)
+    }
+  }, [tab, onlineUrl])
 
   function launchLocalGame(game) {
     window.launcher.launchApp(game.path)
@@ -75,7 +129,6 @@ export default function GamesView({ gamesConfig, onBack, onHelp }) {
               src={onlineUrl}
               style={{ ...S.webview, display: browserLoaded ? 'flex' : 'none' }}
               partition="persist:games"
-              allowpopups="true"
             />
           </div>
         )}

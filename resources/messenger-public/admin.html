@@ -631,7 +631,14 @@ function showToast(msg) {
 
 // ── Utils ─────────────────────────────────────────────────────
 function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // Contact names are freely-typed text that gets interpolated into inline
+  // onclick="..." attributes as single-quoted JS string literals elsewhere
+  // in this file (clearIPFromAlert/clearIP/showQr/deleteContact) — a name
+  // containing a single quote (e.g. "O'Brien", or a deliberately crafted
+  // one) would otherwise break out of that string and inject arbitrary JS
+  // into this authenticated admin session. &#39; must be escaped too, not
+  // just &<>".
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 </script>
 </body>

@@ -15,7 +15,9 @@ export default function PhotosView({ photosConfig, onBack }) {
   const hasAlbum = !!albumUrl
 
   useEffect(() => {
+    let cancelled = false
     window.launcher.getLocalPhotos().then(photos => {
+      if (cancelled) return
       setLocalPhotos(photos)
       // Fetch thumbnails one at a time and paint each as it arrives, rather than
       // waiting on every photo before showing any — with hundreds of photos,
@@ -24,10 +26,14 @@ export default function PhotosView({ photosConfig, onBack }) {
       // the "overlapping" glitch during that mass-mount reflow.
       photos.forEach(p => {
         window.launcher.getPhotoThumbnail(p.path).then(url => {
-          if (url) setThumbs(prev => ({ ...prev, [p.path]: url }))
+          // She can back out to the home screen while hundreds of thumbnails
+          // are still loading — without this guard, every one of those
+          // in-flight IPC calls would still land a setState after unmount.
+          if (!cancelled && url) setThumbs(prev => ({ ...prev, [p.path]: url }))
         })
       })
     })
+    return () => { cancelled = true }
   }, [])
 
   // If album fails to load, fall through to local

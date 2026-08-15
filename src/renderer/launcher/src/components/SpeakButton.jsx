@@ -1,23 +1,19 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { hasTTS, speak, stopSpeaking } from '../utils/speech'
 
 /**
  * Small "read this aloud" button. Drop next to any block of text — the
  * daily note, a reminder, a photo caption — so it can be spoken on tap
  * without every caller reimplementing SpeechSynthesis wiring.
+ *
+ * If some other SpeakButton (or AIBuddy) starts talking, this instance's
+ * "speaking" highlight drops on its own: speech.js's speak() cancels
+ * whatever utterance was active before starting the new one, and Chromium
+ * fires that cancelled utterance's own onerror handler — which is wired to
+ * this button's onEnd callback below — so no polling is needed to notice.
  */
 export default function SpeakButton({ text, size = 'md', style }) {
   const [speaking, setSpeaking] = useState(false)
-
-  // If some other SpeakButton (or AIBuddy) starts talking, drop our own
-  // "speaking" highlight rather than showing two buttons lit at once.
-  useEffect(() => {
-    if (!speaking) return
-    const id = setInterval(() => {
-      if (!window.speechSynthesis?.speaking) setSpeaking(false)
-    }, 300)
-    return () => clearInterval(id)
-  }, [speaking])
 
   if (!hasTTS || !text?.trim()) return null
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 
 function emptyGame() {
-  return { id: Date.now().toString(), name: '', icon: '🎮', path: '' }
+  return { id: crypto.randomUUID(), name: '', icon: '🎮', path: '' }
 }
 
 export default function GamesSettings({ games, onSave }) {

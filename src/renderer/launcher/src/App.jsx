@@ -42,7 +42,15 @@ export default function App() {
   const screensaverTimer = useRef(null)
   const tapTimes = useRef([])
   const peerRef = useRef(null)
-  const iceCandidateQueue = useRef([])  // Buffer candidates that arrive during 3s overlay
+  // True only once setRemoteDescription has actually resolved. peerRef.current
+  // gets assigned well before that (getUserMedia can take real time waiting on
+  // hardware/permission), so gating the ICE handler on peerRef alone let
+  // candidates arriving in that window get addIceCandidate'd against a
+  // connection with no remote description yet — which WebRTC rejects, and the
+  // `.catch(() => {})` swallowed silently, losing the candidate for good
+  // instead of queueing it like candidates that arrive even earlier do.
+  const remoteDescSetRef = useRef(false)
+  const iceCandidateQueue = useRef([])  // Buffer candidates that arrive before remote description is set
   const localStreamRef = useRef(null)   // Ref so hangUp always has fresh stream even in stale closures
   const activeCallRef = useRef(null)    // Mirror of activeCall state for side-effect-free access in hangUp
 
@@ -102,10 +110,11 @@ export default function App() {
     return cleanup
   }, [])
 
-  // ICE candidates — queue if peerRef not ready yet (arrives during 3s overlay)
+  // ICE candidates — queue until setRemoteDescription has actually resolved,
+  // not just until peerRef exists (see remoteDescSetRef comment above).
   useEffect(() => {
     const cleanup = window.launcher.onIceCandidate(({ candidate }) => {
-      if (peerRef.current && candidate) {
+      if (peerRef.current && remoteDescSetRef.current && candidate) {
         peerRef.current.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {})
       } else if (candidate) {
         iceCandidateQueue.current.push(candidate)
@@ -274,6 +283,7 @@ export default function App() {
         window.launcher.logActivity('call-failed-no-media', `${audioErr.name}: ${audioErr.message}`)
         setIncomingCall(null)
         peerRef.current = null
+        remoteDescSetRef.current = false
         pc.close()
         return
       }
@@ -303,6 +313,7 @@ export default function App() {
         throw new Error('Invalid SDP offer')
       }
       await pc.setRemoteDescription(new RTCSessionDescription(offer))
+      remoteDescSetRef.current = true
     } catch (err) {
       window.launcher.logActivity('call-sdp-invalid', err.message)
       window.launcher.declineCall(from)  // notify caller so they don't ring forever
@@ -311,6 +322,7 @@ export default function App() {
       localStreamRef.current = null
       pc.close()
       peerRef.current = null
+      remoteDescSetRef.current = false
       return
     }
 
@@ -342,6 +354,7 @@ export default function App() {
       peerRef.current.close()
       peerRef.current = null
     }
+    remoteDescSetRef.current = false
     iceCandidateQueue.current = []
 
     // Use ref (not state) so this is always fresh even in stale IPC closures,

@@ -3,6 +3,8 @@ import SmartCast from 'vizio-smart-cast'
 let tv = null
 let currentIp = null
 let currentToken = null
+let currentName = null
+let currentModel = null
 let pairingRequestToken = ''
 let deviceId = 'grandmas-launcher'
 let deviceName = "Grandma's Launcher"
@@ -11,14 +13,16 @@ export function getTvStatus() {
   return {
     paired: !!tv && !!currentToken,
     ip: currentIp || null,
-    name: 'Vizio TV',
-    model: null
+    name: currentName || 'Vizio TV',
+    model: currentModel || null
   }
 }
 
-export function loadCredentials(ip, token) {
+export function loadCredentials(ip, token, name, model) {
   currentIp = ip
   currentToken = token
+  currentName = name || null
+  currentModel = model || null
   if (ip) {
     tv = new SmartCast(ip, token || '')
     return true
@@ -30,6 +34,8 @@ export function clearCredentials() {
   tv = null
   currentIp = null
   currentToken = null
+  currentName = null
+  currentModel = null
   pairingRequestToken = ''
 }
 
@@ -62,8 +68,14 @@ export async function discoverTVs() {
   })
 }
 
-export async function startPairing(ip) {
+export async function startPairing(ip, deviceInfo = {}) {
   currentIp = ip
+  // Reset the token from any prior pairing — otherwise getTvStatus() can
+  // report paired:true (tv && currentToken both truthy) for a TV that's
+  // mid-pairing and hasn't actually authenticated yet.
+  currentToken = null
+  currentName = deviceInfo.name || null
+  currentModel = deviceInfo.model || null
   tv = new SmartCast(ip, '')
 
   const result = await tv.pairing.initiate(deviceName, deviceId)

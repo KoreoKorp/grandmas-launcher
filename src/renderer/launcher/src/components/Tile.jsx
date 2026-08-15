@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 
 function isImagePath(icon) {
   if (!icon) return false
@@ -11,6 +11,10 @@ export default function Tile({ tile, onClick, badge = 0 }) {
   const [pressed, setPressed] = useState(false)
   const [activating, setActivating] = useState(false)
   const activatingTimer = useRef(null)
+
+  // The grid re-renders tiles when the caregiver edits them elsewhere, which
+  // can unmount a mid-animation Tile before its 2s timer fires.
+  useEffect(() => () => clearTimeout(activatingTimer.current), [])
 
   function handleClick() {
     clearTimeout(activatingTimer.current)

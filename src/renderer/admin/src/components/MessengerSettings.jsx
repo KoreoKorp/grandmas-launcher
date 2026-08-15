@@ -23,15 +23,23 @@ export default function MessengerSettings({ messenger, onSave }) {
     window.admin.getMessengerInfo().then(setServerInfo).catch(() => setServerInfo(null))
   }, [])
 
+  // Both save functions merge their own section's edits into the CURRENT
+  // stored messenger object, fetched fresh right before saving — not the
+  // `messenger` prop, which can lag behind an in-flight save from the other
+  // section. Without this, saving TURN moments after saving Help Alerts (or
+  // vice versa) could silently overwrite the other section back to its
+  // pre-edit values, since the stale prop snapshot doesn't know about it yet.
   async function saveTurn() {
-    await onSave({ ...messenger, webrtc: { ...(messenger?.webrtc ?? {}), turnUrl, turnUsername, turnCredential } })
+    const fresh = (await window.admin.getConfig()).messenger ?? {}
+    await onSave({ ...fresh, webrtc: { ...(fresh.webrtc ?? {}), turnUrl, turnUsername, turnCredential } })
     setTurnSaved(true)
     setTimeout(() => setTurnSaved(false), 2000)
   }
 
   async function saveHelpAlerts() {
+    const fresh = (await window.admin.getConfig()).messenger ?? {}
     await onSave({
-      ...messenger,
+      ...fresh,
       discordWebhookUrl,
       twilioAccountSid,
       twilioAuthToken,

@@ -24,18 +24,41 @@ if (-not (Test-Path $HeartbeatPath)) {
   exit 0
 }
 
-# Grace period after boot/resume. On wake from sleep this task can fire (via
-# -StartWhenAvailable) before the app's 15s heartbeat interval writes a fresh
-# beat, so the pre-sleep timestamp looks stale even though the kiosk is healthy.
-# If the machine has been up for less than the stale threshold, the app hasn't
-# had a fair chance to prove liveness yet — skip the kill this cycle.
+$watchdogMarkerPath = Join-Path (Split-Path $HeartbeatPath -Parent) 'watchdog-last-run.txt'
+
+# Grace period after a fresh boot. If the machine has been up for less than
+# the stale threshold, the app hasn't had a fair chance to prove liveness yet.
 $lastBoot = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
 if ($lastBoot) {
   $uptimeSeconds = ((Get-Date) - $lastBoot).TotalSeconds
   if ($uptimeSeconds -lt $StaleThresholdSeconds) {
+    Set-Content -Path $watchdogMarkerPath -Value (Get-Date).ToString('o') -Encoding UTF8
     exit 0
   }
 }
+
+# Grace period after sleep/resume. LastBootUpTime does NOT change on resume
+# from sleep — it's not a reboot — so the check above can never catch this
+# case despite what its original comment claimed. Detect it instead by
+# comparing against when this script itself last ran: this task fires every
+# minute, so a gap much larger than that (via -StartWhenAvailable catching up
+# right after resume) means the machine — and this task — was suspended, not
+# that the app hung. The stale heartbeat is expected in that case, not
+# evidence of anything wrong.
+if (Test-Path $watchdogMarkerPath) {
+  try {
+    $lastRun = [DateTime]::Parse((Get-Content -Path $watchdogMarkerPath -Raw))
+    $gapSeconds = ((Get-Date) - $lastRun).TotalSeconds
+    if ($gapSeconds -gt $StaleThresholdSeconds) {
+      Write-SafetyEvent 'watchdog-resume-grace' "watchdog gap ${gapSeconds}s since last run — likely sleep/resume, skipping this cycle"
+      Set-Content -Path $watchdogMarkerPath -Value (Get-Date).ToString('o') -Encoding UTF8
+      exit 0
+    }
+  } catch {
+    # Malformed/missing marker — fall through and treat normally rather than block on it
+  }
+}
+Set-Content -Path $watchdogMarkerPath -Value (Get-Date).ToString('o') -Encoding UTF8
 
 $lastWrite = (Get-Item $HeartbeatPath).LastWriteTimeUtc
 $ageSeconds = ((Get-Date).ToUniversalTime() - $lastWrite).TotalSeconds
@@ -45,7 +68,10 @@ if ($ageSeconds -lt $StaleThresholdSeconds) {
 }
 
 $exeName = [System.IO.Path]::GetFileNameWithoutExtension($ExePath)
-$proc = Get-Process -Name $exeName -ErrorAction SilentlyContinue
+# Matching by name alone would kill any process sharing it — an unrelated
+# app, or a stale copy of this one running from a different install path.
+# Restrict to processes actually running from the expected executable.
+$proc = Get-Process -Name $exeName -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $ExePath }
 
 Write-SafetyEvent 'watchdog-hang-detected' "heartbeat stale ${ageSeconds}s (process running: $([bool]$proc))"
 

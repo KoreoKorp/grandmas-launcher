@@ -48,7 +48,7 @@ function createLauncherWindow(display) {
       preload: join(__dirname, '../preload/launcher.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       webviewTag: true
     }
   })
@@ -90,7 +90,7 @@ function createAdminWindow(display) {
       preload: join(__dirname, '../preload/admin.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   })
 
