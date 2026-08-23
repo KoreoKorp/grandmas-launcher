@@ -35,7 +35,7 @@ export default function Tile({ tile, onClick, badge = 0 }) {
         alignItems: 'center',
         justifyContent: 'center',
         gap: 14,
-        minHeight: 160,
+        minHeight: 190,
         padding: '20px 16px',
         cursor: 'pointer',
         transform: pressed ? 'scale(0.92)' : 'scale(1)',
@@ -97,21 +97,21 @@ const S = {
     zIndex: 2
   },
   icon: {
-    fontSize: 'calc(2.8em * var(--font-scale, 1))',
+    fontSize: 'calc(6em * var(--font-scale, 1))',
     lineHeight: 1,
     display: 'block',
     filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.3))',
     transition: 'transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1)',
   },
   spinner: {
-    fontSize: 'calc(2.4em * var(--font-scale, 1))',
+    fontSize: 'calc(4.8em * var(--font-scale, 1))',
     lineHeight: 1,
     display: 'block',
     animation: 'float 1.2s ease-in-out infinite'
   },
   iconImage: {
-    width: 68,
-    height: 68,
+    width: 152,
+    height: 152,
     objectFit: 'contain',
     borderRadius: 12,
     pointerEvents: 'none',
