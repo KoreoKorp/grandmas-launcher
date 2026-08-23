@@ -1,0 +1,572 @@
+<title>Buddy Sidebar Preview</title>
+<style>
+  :root {
+    --bg-main: #1C322D;
+    --bg-card: #24403A;
+    --bg-card-hover: #2E4A41;
+    --bg-page: #12211D;
+    --tile-surface: #F3D08A;
+    --tile-surface-hover: #F7DCA0;
+    --border: #485E59;
+    --border-subtle: rgba(255,255,255,0.10);
+    --accent: #EBB552;
+    --accent-hover: #F1C775;
+    --accent-dim: rgba(235,181,82,0.16);
+    --text-primary: #F8F3EE;
+    --text-secondary: #A9B8B5;
+    --text-dim: #7E908C;
+    --text-on-card: #1C322D;
+    --danger: #c2553f;
+    --font-display: Georgia, 'Times New Roman', serif;
+    --font-body: -apple-system, 'Segoe UI', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg-page);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-weight: 300;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 22px;
+    padding: 40px 20px 60px;
+  }
+
+  .masthead { text-align: center; max-width: 560px; }
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .masthead h1 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 28px;
+    letter-spacing: -0.2px;
+  }
+  .masthead p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-top: 8px;
+    line-height: 1.55;
+  }
+
+  .stage {
+    display: flex;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 40px 90px -30px rgba(0,0,0,0.6);
+    border: 1px solid var(--border-subtle);
+  }
+
+  /* ── Sidebar column, matching Sidebar.jsx proportions ── */
+  .sidebar {
+    width: 400px;
+    background: var(--bg-main);
+    background-image: radial-gradient(ellipse at 50% 0%, rgba(235,181,82,0.06) 0%, transparent 70%);
+    padding: 26px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+  }
+
+  .time-wrap { text-align: center; padding: 10px 0 4px; }
+  .time { font-family: var(--font-display); font-size: 46px; font-weight: 500; letter-spacing: -1px; }
+  .date { font-size: 13px; color: var(--text-secondary); margin-top: 4px; font-weight: 500; }
+  .greeting { font-size: 14px; color: var(--accent); font-weight: 700; text-align: center; letter-spacing: 0.2px; }
+
+  .weather-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, var(--accent-dim) 0%, rgba(255,255,255,0.03) 100%);
+    border: 1px solid rgba(235,181,82,0.25);
+    border-radius: 12px;
+    padding: 10px 14px;
+  }
+  .weather-card .icon { font-size: 28px; }
+  .weather-card .temp { font-size: 18px; font-weight: 800; }
+  .weather-card .cond { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+
+  .divider { height: 1px; background: var(--border-subtle); margin: 1px 0; }
+
+  .note-card {
+    background: var(--accent-dim);
+    border: 1px solid rgba(235,181,82,0.25);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .note-label {
+    font-size: 10px; color: var(--accent); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px;
+  }
+  .note-text { font-size: 13px; line-height: 1.5; }
+
+  /* ── Buddy zone: the AIBUDDYSPOT.png target area ── */
+  .buddy-zone {
+    position: relative;
+    flex: 1;
+    min-height: 340px;
+    background: var(--bg-card);
+    border: 1.5px solid var(--border);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px -12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
+  /* — Idle / pet view — */
+  .idle-view {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 18px 16px 14px;
+    transition: opacity 0.28s ease, transform 0.28s ease;
+  }
+  .mood-chip {
+    align-self: flex-start;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border-subtle);
+    border-radius: 20px;
+    padding: 4px 10px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .stage-floor {
+    position: relative;
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+
+  .speech-bubble {
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card-hover);
+    border: 1px solid var(--border);
+    border-radius: 14px 14px 14px 4px;
+    padding: 9px 13px;
+    font-size: 12.5px;
+    line-height: 1.4;
+    max-width: 86%;
+    text-align: center;
+    box-shadow: 0 6px 18px -6px rgba(0,0,0,0.4);
+    animation: popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  .speech-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -6px; left: 26px;
+    width: 12px; height: 12px;
+    background: var(--bg-card-hover);
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    transform: rotate(45deg);
+  }
+
+  .buddy-wrap {
+    position: relative;
+    cursor: pointer;
+    animation: buddyBob 3.6s ease-in-out infinite;
+    filter: drop-shadow(0 14px 16px rgba(0,0,0,0.4));
+    transition: transform 0.12s ease;
+  }
+  .buddy-wrap.wander { animation: buddyBob 3.6s ease-in-out infinite, wander 10s ease-in-out infinite; }
+  .buddy-wrap:active { transform: scale(0.94); }
+
+  /* Puppet rig — body/head/tail cut from the same source image, each animated independently */
+  .cat-rig {
+    position: relative;
+    width: 175px;
+    height: 211px;
+  }
+  .rig-layer { position: absolute; display: block; pointer-events: none; }
+  .rig-body {
+    left: 0; top: 0; width: 175px; height: 211px;
+    animation: bodyBreathe 2.6s ease-in-out infinite;
+    transform-origin: 50% 100%;
+  }
+  .rig-head {
+    left: 4px; top: 0; width: 146px; height: 90px;
+    transform-origin: 50% 96%;
+    animation: headTilt 4.4s ease-in-out infinite;
+  }
+  .rig-tail {
+    left: 114px; top: 48px; width: 61px; height: 68px;
+    transform-origin: 9% 92%;
+    animation: tailSwish 2.1s ease-in-out infinite;
+  }
+  .cat-rig.tap-pulse .rig-body { animation: bodyBreathe 2.6s ease-in-out infinite, tapPulse 0.45s ease-out; }
+  .cat-rig.tap-pulse .rig-head { animation: headTilt 4.4s ease-in-out infinite, headNod 0.45s ease-out; }
+  .cat-rig.tap-pulse .rig-tail { animation: tailSwish 2.1s ease-in-out infinite, tailFlick 0.45s ease-out; }
+
+  .heart-pop {
+    position: absolute;
+    top: -6px;
+    font-size: 20px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .heart-pop.show { animation: heartFloat 0.9s ease-out forwards; }
+
+  .pet-hint {
+    font-size: 11.5px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    letter-spacing: 0.2px;
+  }
+
+  .chat-affordance {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px;
+    margin-top: 10px;
+    background: var(--accent-dim);
+    border: 1px solid rgba(235,181,82,0.3);
+    border-radius: 14px;
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 13.5px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .chat-affordance:hover { background: rgba(235,181,82,0.24); }
+
+  /* — Inline chat view — */
+  .chat-view {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px);
+    transition: opacity 0.28s ease, transform 0.28s ease;
+  }
+  .buddy-zone.chatting .idle-view { opacity: 0; pointer-events: none; transform: translateY(-8px); }
+  .buddy-zone.chatting .chat-view { opacity: 1; pointer-events: auto; transform: translateY(0); }
+
+  .chat-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+  .chat-header .back-btn {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 13px; color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+  .chat-header .name { font-weight: 700; font-size: 13.5px; }
+  .chat-header .status { font-size: 11px; color: var(--text-secondary); }
+
+  .chat-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .msg-row { display: flex; align-items: flex-end; gap: 6px; }
+  .msg-row.user { justify-content: flex-end; }
+  .bubble {
+    padding: 9px 12px;
+    border-radius: 14px 14px 14px 3px;
+    font-size: 12.5px;
+    line-height: 1.45;
+    max-width: 82%;
+  }
+  .bubble.bot { background: rgba(255,255,255,0.07); border: 1px solid var(--border); }
+  .bubble.user {
+    background: var(--accent); color: var(--text-on-card);
+    border-radius: 14px 14px 3px 14px; font-weight: 500;
+  }
+  .mini-avatar {
+    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+    background: radial-gradient(circle at 40% 35%, #F5D9A8, #EBB552);
+    display: flex; align-items: center; justify-content: center; font-size: 12px;
+  }
+
+  .chat-input-row {
+    display: flex;
+    gap: 7px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+  .chat-input-row input {
+    flex: 1;
+    background: rgba(255,255,255,0.06);
+    border: 1.5px solid var(--border);
+    border-radius: 20px;
+    padding: 9px 13px;
+    color: var(--text-primary);
+    font-size: 12.5px;
+    font-family: var(--font-body);
+    outline: none;
+  }
+  .chat-input-row input::placeholder { color: var(--text-dim); }
+  .mic-btn, .send-btn {
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: rgba(255,255,255,0.07);
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; cursor: pointer; flex-shrink: 0;
+  }
+  .send-btn { background: var(--accent); border: none; color: var(--text-on-card); font-weight: 700; }
+
+  .help-btn {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 16px;
+    background: linear-gradient(135deg, #2E4A41 0%, #1C322D 100%);
+    border: 1.5px solid var(--border);
+    border-radius: 18px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+  .help-btn .icon { font-size: 22px; }
+  .help-btn .txt { font-size: 13px; font-weight: 700; }
+  .help-btn .sub { font-size: 10.5px; font-weight: 400; opacity: 0.85; color: var(--text-secondary); }
+
+  /* ── Tile grid slice, for context only ── */
+  .tiles {
+    width: 300px;
+    background: var(--bg-main);
+    padding: 22px 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-content: start;
+  }
+  .tile {
+    aspect-ratio: 1.1;
+    background: linear-gradient(160deg, var(--tile-surface) 0%, #EABF74 100%);
+    border-radius: 14px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px;
+    color: var(--text-on-card);
+  }
+  .tile .emoji { font-size: 30px; }
+  .tile .lbl { font-size: 11.5px; font-weight: 700; }
+
+  .callouts {
+    display: flex;
+    gap: 10px;
+    max-width: 720px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .callout {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 8px 13px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .callout b { color: var(--text-primary); }
+
+  @keyframes buddyBob { 0%,100% { translate: 0 -3px; } 50% { translate: 0 3px; } }
+  @keyframes wander {
+    0%, 100% { margin-left: 0; }
+    25% { margin-left: -34px; }
+    75% { margin-left: 34px; }
+  }
+  @keyframes bodyBreathe {
+    0%, 100% { transform: scale(1, 1); }
+    50%      { transform: scale(1.015, 0.985); }
+  }
+  @keyframes headTilt {
+    0%, 100% { transform: rotate(-3.5deg); }
+    50%      { transform: rotate(3.5deg); }
+  }
+  @keyframes tailSwish {
+    0%, 100% { transform: rotate(-8deg); }
+    50%      { transform: rotate(16deg); }
+  }
+  @keyframes tapPulse {
+    0%   { transform: scale(1, 1); }
+    30%  { transform: scale(0.86, 1.14); }
+    60%  { transform: scale(1.1, 0.9); }
+    100% { transform: scale(1, 1); }
+  }
+  @keyframes headNod {
+    0%   { transform: rotate(0deg); }
+    35%  { transform: rotate(-14deg); }
+    70%  { transform: rotate(8deg); }
+    100% { transform: rotate(0deg); }
+  }
+  @keyframes tailFlick {
+    0%   { transform: rotate(0deg); }
+    30%  { transform: rotate(-26deg); }
+    65%  { transform: rotate(20deg); }
+    100% { transform: rotate(0deg); }
+  }
+  @keyframes popIn { 0% { opacity:0; transform: translateX(-50%) scale(0.85); } 70% { transform: translateX(-50%) scale(1.04); } 100% { opacity:1; transform: translateX(-50%) scale(1); } }
+  @keyframes heartFloat {
+    0% { opacity: 0; transform: translateY(0) scale(0.6); }
+    20% { opacity: 1; transform: translateY(-6px) scale(1.1); }
+    100% { opacity: 0; transform: translateY(-38px) scale(1); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .buddy-wrap, .buddy-wrap.wander, .rig-body, .rig-head, .rig-tail { animation: none; }
+  }
+</style>
+
+<div class="masthead">
+  <div class="eyebrow">Option 2 &middot; Preview</div>
+  <h1>Buddy the cat, living inline in the sidebar</h1>
+  <p>The actual cat from Catsingle.jpeg, cut into a 3-piece puppet rig (head, tail, body) so each part moves on its own — head tilts, tail swishes, body breathes — plus drifting and a tap reaction. Tap the cat to pet him — tap "Let's chat" to open the conversation right there, no popup.</p>
+</div>
+
+<div class="stage">
+  <div class="sidebar">
+    <div class="time-wrap">
+      <div class="time">12:38 AM</div>
+      <div class="date">Saturday, August 22</div>
+    </div>
+    <div class="greeting">Good night, Grammie!</div>
+
+    <div class="weather-card">
+      <span class="icon">☀️</span>
+      <div>
+        <div class="temp">69°F</div>
+        <div class="cond">Clear sky</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="note-card">
+      <div class="note-label">Today's Note</div>
+      <div class="note-text">Hey Grammie! What they talkin bout?</div>
+    </div>
+
+    <!-- ── The buddy zone — this replaces the floating corner button ── -->
+    <div class="buddy-zone" id="buddyZone">
+
+      <div class="idle-view">
+        <div class="mood-chip" id="moodChip">😊 Cheerful</div>
+
+        <div class="stage-floor">
+          <div class="speech-bubble" id="speechBubble">Looks sunny today! Want me to read the forecast?</div>
+          <div class="buddy-wrap wander" id="buddyWrap" onclick="petBuddy()">
+            <span class="heart-pop" id="heartPop">💛</span>
+            <div class="cat-rig" id="catRig">
+              <img class="rig-layer rig-body" alt="Buddy the cat" src="./assets/layer-body.png" />
+              <img class="rig-layer rig-tail" alt="" src="./assets/layer-tail.png" />
+              <img class="rig-layer rig-head" alt="" src="./assets/layer-head.png" />
+            </div>
+          </div>
+        </div>
+
+        <div class="pet-hint">Tap Buddy to say hi</div>
+
+        <div class="chat-affordance" onclick="openChat()">💬 Let's chat</div>
+      </div>
+
+      <div class="chat-view">
+        <div class="chat-header">
+          <div class="back-btn" onclick="closeChat()">←</div>
+          <div class="mini-avatar">🐱</div>
+          <div>
+            <div class="name">Buddy</div>
+            <div class="status">Here to help!</div>
+          </div>
+        </div>
+        <div class="chat-body">
+          <div class="msg-row"><div class="mini-avatar">🐱</div><div class="bubble bot">Good night! I'm Buddy. How can I help you today?</div></div>
+          <div class="msg-row user"><div class="bubble user">What's the weather tomorrow?</div></div>
+          <div class="msg-row"><div class="mini-avatar">🐱</div><div class="bubble bot">Sunny and 71°F tomorrow &mdash; a lovely day for the porch! ☀️</div></div>
+        </div>
+        <div class="chat-input-row">
+          <div class="mic-btn">🎤</div>
+          <input placeholder="Type or speak your message..." />
+          <div class="send-btn">➤</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="help-btn">
+      <span class="icon">💙</span>
+      <span>
+        <div class="txt">Need help?</div>
+        <div class="sub">Tap here if you feel lost</div>
+      </span>
+    </button>
+  </div>
+
+  <div class="tiles">
+    <div class="tile"><span class="emoji">📰</span><span class="lbl">News</span></div>
+    <div class="tile"><span class="emoji">📌</span><span class="lbl">Pinterest</span></div>
+    <div class="tile"><span class="emoji">🖼️</span><span class="lbl">Photos</span></div>
+    <div class="tile"><span class="emoji">🎮</span><span class="lbl">Games</span></div>
+  </div>
+</div>
+
+<div class="callouts">
+  <div class="callout">🧩 <b>Rigged</b> — head, tail, and body move independently, all the time</div>
+  <div class="callout">😊 <b>Moods</b> — chip up top shifts with time of day &amp; events</div>
+  <div class="callout">🚶 <b>Wandering</b> — drifts left/right in the frame when idle</div>
+  <div class="callout">💬 <b>Proactive</b> — speech bubble pops in on its own sometimes</div>
+  <div class="callout">💛 <b>Petting</b> — tap Buddy for a bigger head-nod + tail-flick reaction</div>
+</div>
+
+<script>
+  function petBuddy() {
+    const heart = document.getElementById('heartPop');
+    const moodChip = document.getElementById('moodChip');
+    const bubble = document.getElementById('speechBubble');
+    const rig = document.getElementById('catRig');
+    heart.classList.remove('show');
+    void heart.offsetWidth;
+    heart.classList.add('show');
+    rig.classList.remove('tap-pulse');
+    void rig.offsetWidth;
+    rig.classList.add('tap-pulse');
+    const prevMood = moodChip.textContent;
+    moodChip.textContent = '🥰 Loved';
+    bubble.textContent = 'Hehe, that tickles!';
+    clearTimeout(window._moodTimer);
+    window._moodTimer = setTimeout(() => {
+      moodChip.textContent = prevMood;
+      bubble.textContent = 'Looks sunny today! Want me to read the forecast?';
+    }, 2200);
+  }
+  function openChat() {
+    document.getElementById('buddyZone').classList.add('chatting');
+  }
+  function closeChat() {
+    document.getElementById('buddyZone').classList.remove('chatting');
+  }
+</script>
