@@ -200,6 +200,17 @@ if (!store.get('migrations.aiTileAdded')) {
   store.set('migrations.aiTileAdded', true)
 }
 
+// One-time migration: Buddy now lives in the sidebar as the cat — remove the
+// legacy 🤖 "Ask AI" tile so the old robot chat can't come back.
+if (!store.get('migrations.aiTileRemoved')) {
+  const currentTiles = store.get('tiles')
+  const filtered = currentTiles.filter(t => t.id !== 'ai-helper' && t.target !== 'ai-helper')
+  if (filtered.length !== currentTiles.length) {
+    store.set('tiles', filtered)
+  }
+  store.set('migrations.aiTileRemoved', true)
+}
+
 // Family Radio ambient stream can be turned off by the caregiver. Default on
 // (setting !== false) so a missing/legacy config still surfaces clips — matches
 // the renderer's `config.familyRadio?.enabled !== false` check. Read live so the

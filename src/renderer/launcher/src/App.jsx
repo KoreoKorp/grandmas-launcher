@@ -12,8 +12,6 @@ import IncomingCallOverlay from './components/IncomingCallOverlay'
 import VideoCallOverlay from './components/VideoCallOverlay'
 import AudioPlayer from './components/AudioPlayer'
 import DailyCheckin from './components/DailyCheckin'
-import AIHelper from './components/AIHelper'
-import AIBuddy from './components/AIBuddy'
 
 export default function App() {
   const [config, setConfig] = useState(null)
@@ -26,8 +24,6 @@ export default function App() {
   const [browserLoaded, setBrowserLoaded] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
   const [showCheckin, setShowCheckin] = useState(false)
-  const [showAIHelper, setShowAIHelper] = useState(false)
-  const [showAIBuddy, setShowAIBuddy] = useState(false)
   const [missedCalls, setMissedCalls] = useState(0)
 
   const [incomingCall, setIncomingCall] = useState(null)   // { from, callerName, offer }
@@ -343,7 +339,6 @@ export default function App() {
         return
       }
       if (tile.target === 'weather') setShowWeather(true)
-      if (tile.target === 'ai-helper') { setShowAIBuddy(true); return }
     }
     window.launcher.logActivity('tile-open', tile.target)
   }
@@ -496,24 +491,6 @@ export default function App() {
       {showCheckin && (
         <DailyCheckin
           onComplete={() => setShowCheckin(false)}
-        />
-      )}
-
-      {/* AI Buddy chat modal — still reachable via the ai-helper tile if an
-          older config still has it; the sidebar cat (Sidebar.jsx) is the
-          primary Buddy surface now */}
-      {showAIBuddy && (
-        <AIBuddy
-          onClose={() => setShowAIBuddy(false)}
-          onTileOpen={(target) => {
-            setShowAIBuddy(false)
-            // Small delay so chat closes first
-            setTimeout(() => {
-              const tile = (config?.tiles || []).find(t => t.target === target || t.label?.toLowerCase() === target?.toLowerCase())
-              if (tile) handleTileOpen(tile)
-            }, 200)
-          }}
-          tiles={config?.tiles || []}
         />
       )}
 

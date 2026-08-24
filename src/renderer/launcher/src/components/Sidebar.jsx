@@ -81,22 +81,8 @@ export default function Sidebar({ userName, dailyNote, reminders, weather, onHel
           </div>
         ) : null}
 
-        {/* Upcoming Reminders */}
-        {reminders?.length > 0 && (
-          <div style={S.reminderList}>
-            {reminders.slice(0, 3).map((r, i) => (
-              <div key={i} style={S.reminderItem}>
-                <span style={S.reminderBell}>🔔</span>
-                <div>
-                  <div style={S.reminderText}>{r.message}</div>
-                  <div style={S.reminderTime}>
-                    {new Date(r.time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Upcoming reminders live in the alert popup only — the persistent
+            list came out to give Buddy the cat the space */}
 
         {/* Buddy the cat — lives in the sidebar, opens chat inline */}
         <BuddyCat />

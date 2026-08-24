@@ -424,7 +424,7 @@ const S = {
   zone: {
     position: 'relative',
     flex: 1,
-    minHeight: 300,
+    minHeight: 240,
     background: 'var(--bg-card)',
     border: '1.5px solid var(--border)',
     borderRadius: 'var(--radius)',
@@ -437,8 +437,9 @@ const S = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    padding: '12px 14px 12px',
-    transition: 'opacity 0.28s ease, transform 0.28s ease'
+    padding: '10px 14px 10px',
+    transition: 'opacity 0.28s ease, transform 0.28s ease',
+    minHeight: 0
   },
   idleHidden: { opacity: 0, pointerEvents: 'none', transform: 'translateY(-8px)' },
   moodChip: {
@@ -677,7 +678,7 @@ const CSS = `
 
 .bc-bubble {
   position: absolute;
-  top: 2px;
+  top: 26px;
   left: 50%;
   background: var(--bg-card-hover, #2E4A41);
   border: 1px solid var(--border);
