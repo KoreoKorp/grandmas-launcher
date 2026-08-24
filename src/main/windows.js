@@ -1,5 +1,6 @@
 import { BrowserWindow, screen, globalShortcut, app } from 'electron'
 import { join } from 'path'
+import { writeFileSync } from 'fs'
 import { logActivity } from './store.js'
 import { forceGoHome } from './ipc.js'
 
@@ -154,6 +155,25 @@ function registerLauncherShortcuts(win) {
 
   // Caregiver panel: Ctrl+Shift+A forces the admin window above the launcher
   globalShortcut.register('Ctrl+Shift+A', forceShowAdmin)
+
+  // Full exit: Ctrl+Shift+Q quits the launcher entirely
+  globalShortcut.register('Ctrl+Shift+Q', quitLauncher)
+}
+
+// Quit for real. The external watchdog (watchdog.ps1) relaunches the kiosk
+// whenever the heartbeat goes stale — even when no process is running — so a
+// plain app.quit() would be undone within a minute. Dropping quit-flag.txt
+// next to the heartbeat makes the watchdog stand down; the flag is cleared on
+// the next launcher start (auto-start task, manual launch, or reboot).
+export function quitLauncher() {
+  logActivity('launcher-quit-shortcut')
+  try {
+    writeFileSync(join(app.getPath('userData'), 'quit-flag.txt'), String(Date.now()))
+  } catch {
+    // If the flag can't be written, still quit — the watchdog may relaunch,
+    // which is the safe failure mode for a kiosk.
+  }
+  app.quit()
 }
 
 export function shrinkLauncher(win) {
@@ -202,5 +222,8 @@ function registerAlwaysOnShortcuts(win) {
   // Admin panel must be reachable regardless of which window has focus —
   // this set replaces the launcher set on blur, so register it here too
   globalShortcut.register('Ctrl+Shift+A', forceShowAdmin)
+
+  // Full exit must work regardless of focus too
+  globalShortcut.register('Ctrl+Shift+Q', quitLauncher)
 }
 

@@ -3,6 +3,7 @@ import { join } from 'path'
 import { exec } from 'child_process'
 import dns from 'dns'
 import { writeFile } from 'fs/promises'
+import { rmSync } from 'fs'
 import { io } from 'socket.io-client'
 import { createWindows, expandLauncher } from './windows.js'
 import { registerIPC, setWindows, forceGoHome, setupLauncherPermissions, setSignalEmitter, closeEmbeddedBrowser } from './ipc.js'
@@ -33,6 +34,13 @@ app.on('second-instance', () => {
 })
 
 app.whenReady().then(async () => {
+  // The launcher is back — re-arm the external watchdog. quit-flag.txt is
+  // dropped by the Ctrl+Shift+Q full-exit shortcut so the watchdog doesn't
+  // resurrect an intentionally closed kiosk; any fresh start clears it.
+  try {
+    rmSync(join(app.getPath('userData'), 'quit-flag.txt'), { force: true })
+  } catch { /* non-fatal */ }
+
   await initMessengerServer()
 
   registerIPC()

@@ -14,7 +14,6 @@ import AudioPlayer from './components/AudioPlayer'
 import DailyCheckin from './components/DailyCheckin'
 import AIHelper from './components/AIHelper'
 import AIBuddy from './components/AIBuddy'
-import BuddyFloat from './components/BuddyFloat'
 
 export default function App() {
   const [config, setConfig] = useState(null)
@@ -500,14 +499,9 @@ export default function App() {
         />
       )}
 
-      {/* AI Buddy - persistent floating button + chat panel */}
-      {!showAIBuddy && (
-        <BuddyFloat
-          onClick={() => setShowAIBuddy(true)}
-          hasUnread={false}
-        />
-      )}
-
+      {/* AI Buddy chat modal — still reachable via the ai-helper tile if an
+          older config still has it; the sidebar cat (Sidebar.jsx) is the
+          primary Buddy surface now */}
       {showAIBuddy && (
         <AIBuddy
           onClose={() => setShowAIBuddy(false)}

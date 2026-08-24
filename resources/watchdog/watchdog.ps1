@@ -20,7 +20,15 @@ function Write-SafetyEvent([string]$Type, [string]$Detail) {
 }
 
 if (-not (Test-Path $HeartbeatPath)) {
-  # App may still be starting up for the first time — nothing to act on yet.
+  # App may still be starting up for the first time �?" nothing to act on yet.
+  exit 0
+}
+
+# Intentional exit: the launcher drops quit-flag.txt when quit via its
+# Ctrl+Shift+Q shortcut, so a closed kiosk stays closed. The app deletes the
+# flag on its next start, which re-arms this watchdog.
+$quitFlagPath = Join-Path (Split-Path $HeartbeatPath -Parent) 'quit-flag.txt'
+if (Test-Path $quitFlagPath) {
   exit 0
 }
 

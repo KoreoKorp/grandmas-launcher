@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import BuddyCat from './BuddyCat'
 
 function greeting(name) {
   const h = new Date().getHours()
@@ -97,7 +98,8 @@ export default function Sidebar({ userName, dailyNote, reminders, weather, onHel
           </div>
         )}
 
-        <div style={{ flex: 1 }} />
+        {/* Buddy the cat — lives in the sidebar, opens chat inline */}
+        <BuddyCat />
 
         {/* Help Button — large, obvious, friendly */}
         <button style={S.helpBtn} onClick={onHelpPress}>
