@@ -71,6 +71,9 @@ export default function BuddyCat() {
   const [listening, setListening] = useState(false)
   const [speaking, setSpeaking] = useState(false)
   const [autoSpeak, setAutoSpeak] = useState(true)
+  const [reducedMotion, setReducedMotion] = useState(
+    () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+  )
 
   const scrollRef = useRef(null)
   const rigRef = useRef(null)
@@ -99,6 +102,15 @@ export default function BuddyCat() {
   useEffect(() => {
     const id = setInterval(() => setMood(moodFor(new Date().getHours())), 60_000)
     return () => clearInterval(id)
+  }, [])
+
+  /* ── Track OS reduced-motion: keep the gentle idle life, drop the flashy
+     stuff (a fully frozen cat reads as broken) ── */
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const onChange = () => setReducedMotion(mq.matches)
+    mq.addEventListener?.('change', onChange)
+    return () => mq.removeEventListener?.('change', onChange)
   }, [])
 
   /* ── Proactive commentary ── */
@@ -303,7 +315,7 @@ export default function BuddyCat() {
   ]
 
   return (
-    <div className="bc-zone" style={S.zone}>
+    <div className={reducedMotion ? 'bc-zone bc-reduced' : 'bc-zone'} style={S.zone}>
       <style>{CSS}</style>
 
       {/* ── Pet view ── */}
@@ -778,7 +790,7 @@ const CSS = `
 }
 @keyframes bc-breathe {
   0% { transform: scale(1, 1); }
-  40% { transform: scale(1.02, 0.982); }
+  40% { transform: scale(1, 0.982); }
   100% { transform: scale(1, 1); }
 }
 @keyframes bc-head-tilt { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
@@ -805,11 +817,15 @@ const CSS = `
   100% { opacity: 0; transform: translateY(-44px) scale(0.95); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .bc-zone *, .bc-zone *::before, .bc-zone *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
+/* Reduced motion: drop drift, hearts, purr and gesture pops, but keep the
+   gentle idle loops (slowed) — a completely frozen cat reads as broken. */
+.bc-reduced .bc-drift { transform: none !important; }
+.bc-reduced .bc-heart { display: none; }
+.bc-reduced .bc-head-gesture, .bc-reduced .bc-tail-gesture { animation: none !important; }
+.bc-reduced .bc-rig.bc-purring { animation: none; }
+.bc-reduced .bc-rig.bc-purring .bc-torso { animation: bc-breathe 3s ease-in-out infinite; }
+.bc-reduced .bc-float { animation-duration: 6s; }
+.bc-reduced .bc-tail { animation-duration: 4.5s; }
+.bc-reduced .bc-tail-sway { animation-duration: 9s; }
+.bc-reduced .bc-head { animation-duration: 7s; }
 `
