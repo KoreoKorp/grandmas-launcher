@@ -334,19 +334,21 @@ export default function BuddyCat() {
           >
             <div className="bc-shadow" />
             <div ref={driftRef} className="bc-drift">
-              <div ref={rigRef} className="bc-rig">
-                <img className="bc-layer bc-legs" alt="" src={legsUrl} />
-                <span className="bc-float">
-                  <img className="bc-layer bc-torso" alt="Buddy the cat" src={torsoUrl} />
-                  <span ref={tailGestureRef} className="bc-tail-gesture">
-                    <span className="bc-tail-sway">
-                      <img className="bc-layer bc-tail" alt="" src={tailUrl} />
+              <div className="bc-rig-outer">
+                <div ref={rigRef} className="bc-rig">
+                  <img className="bc-layer bc-legs" alt="" src={legsUrl} />
+                  <span className="bc-float">
+                    <img className="bc-layer bc-torso" alt="Buddy the cat" src={torsoUrl} />
+                    <span ref={tailGestureRef} className="bc-tail-gesture">
+                      <span className="bc-tail-sway">
+                        <img className="bc-layer bc-tail" alt="" src={tailUrl} />
+                      </span>
+                    </span>
+                    <span ref={headGestureRef} className="bc-head-gesture">
+                      <img className="bc-layer bc-head" alt="" src={headUrl} />
                     </span>
                   </span>
-                  <span ref={headGestureRef} className="bc-head-gesture">
-                    <img className="bc-layer bc-head" alt="" src={headUrl} />
-                  </span>
-                </span>
+                </div>
               </div>
             </div>
             <div ref={heartsRef} className="bc-hearts" />
@@ -720,45 +722,55 @@ const CSS = `
 .bc-heart { position: absolute; top: -6px; left: var(--hx, 50%); font-size: var(--hs, 18px); opacity: 0; }
 .bc-heart { animation: bc-heart-float 0.95s ease-out forwards; }
 
-.bc-rig { position: relative; width: 175px; height: 211px; }
+/* The rig is laid out at NATURAL pixel size (397x478, integer-exact — no
+   rounding drift) and uniformly scaled down as one unit. Scaling each layer
+   independently to rounded display boxes gave every PNG a slightly
+   different effective scale, opening hairline gaps at the joints. */
+.bc-rig-outer { position: relative; width: 175px; height: 211px; }
+.bc-rig {
+  position: absolute; top: 0; left: 0;
+  width: 397px; height: 478px;
+  transform: scale(0.4408);
+  transform-origin: top left;
+}
 .bc-layer { position: absolute; display: block; pointer-events: none; }
 
-.bc-legs { left: 8px; top: 149px; width: 148px; height: 62px; }
+.bc-legs { left: 18px; top: 338px; width: 336px; height: 140px; }
 
 .bc-float {
   position: absolute; inset: 0; display: block;
   animation: bc-bob 3.6s ease-in-out infinite;
 }
 .bc-torso {
-  left: 3px; top: 84px; width: 160px; height: 72px;
+  left: 6px; top: 190px; width: 362px; height: 162px;
   animation: bc-breathe 3s ease-in-out infinite;
   transform-origin: 50% 100%;
 }
 .bc-tail-gesture {
   position: absolute; display: block;
-  left: 103px; top: 48px; width: 72px; height: 75px;
-  transform-origin: 23% 83%;
+  left: 233px; top: 109px; width: 164px; height: 170px;
+  transform-origin: 23.4% 83.3%;
   pointer-events: none;
 }
 .bc-tail-sway {
   position: absolute; inset: 0; display: block;
-  transform-origin: 23% 83%;
+  transform-origin: 23.4% 83.3%;
   animation: bc-tail-sway 5.7s ease-in-out infinite;
 }
 .bc-tail {
-  left: 0; top: 0; width: 72px; height: 75px;
-  transform-origin: 23% 83%;
+  left: 0; top: 0; width: 164px; height: 170px;
+  transform-origin: 23.4% 83.3%;
   animation: bc-tail-swish 2.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }
 .bc-head-gesture {
   position: absolute; display: block;
-  left: -3px; top: 0; width: 153px; height: 95px;
-  transform-origin: 52% 91%;
+  left: -7px; top: 0; width: 347px; height: 216px;
+  transform-origin: 52.3% 90.7%;
   pointer-events: none;
 }
 .bc-head {
-  left: 0; top: 0; width: 153px; height: 95px;
-  transform-origin: 52% 91%;
+  left: 0; top: 0; width: 347px; height: 216px;
+  transform-origin: 52.3% 90.7%;
   animation: bc-head-tilt 4.4s ease-in-out infinite;
 }
 
@@ -783,7 +795,7 @@ const CSS = `
 
 .bc-typing { animation: pulse 1.2s ease-in-out infinite; color: var(--accent); letter-spacing: 2; }
 
-@keyframes bc-bob { 0%,100% { translate: 0 -3px; } 50% { translate: 0 3px; } }
+@keyframes bc-bob { 0%,100% { translate: 0 -7px; } 50% { translate: 0 7px; } }
 @keyframes bc-shadow-pulse {
   0%,100% { transform: translateX(-50%) scaleX(1); opacity: 0.5; }
   50% { transform: translateX(-50%) scaleX(0.82); opacity: 0.32; }
