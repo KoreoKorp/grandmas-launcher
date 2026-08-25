@@ -82,11 +82,31 @@ export default function BuddyCat() {
   const driftRef = useRef(null)
   const heartsRef = useRef(null)
   const recognitionRef = useRef(null)
+  const voiceRef = useRef(null)
   const bubbleTimerRef = useRef(null)
   const hideTimerRef = useRef(null)
   const moodTimerRef = useRef(null)
   const modeRef = useRef(mode)
   modeRef.current = mode
+
+  /* ── Pick the warmest available TTS voice (Windows ships robotic defaults;
+     Natural/Aria/Jenny sound far better when installed) ── */
+  useEffect(() => {
+    if (!hasTTS) return
+    function pickVoice() {
+      const voices = window.speechSynthesis.getVoices().filter(v => v.lang?.startsWith('en'))
+      if (!voices.length) return
+      const score = v =>
+        (/natural/i.test(v.name) ? 100 : 0) +
+        (/aria|jenny|emma|ava|libby|sonia/i.test(v.name) ? 50 : 0) +
+        (/zira/i.test(v.name) ? 20 : 0) +
+        (v.lang === 'en-US' ? 10 : 0)
+      voiceRef.current = [...voices].sort((a, b) => score(b) - score(a))[0] ?? null
+    }
+    pickVoice()
+    window.speechSynthesis.addEventListener('voiceschanged', pickVoice)
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', pickVoice)
+  }, [])
 
   /* ── Speech bubble ── */
   const say = useCallback((text, dur) => {
@@ -214,8 +234,9 @@ export default function BuddyCat() {
     if (!hasTTS) return
     window.speechSynthesis.cancel()
     const utt = new SpeechSynthesisUtterance(text)
-    utt.rate = 0.9
-    utt.pitch = 1.05
+    if (voiceRef.current) utt.voice = voiceRef.current
+    utt.rate = 0.92
+    utt.pitch = 1.1
     utt.onstart = () => setSpeaking(true)
     utt.onend = () => setSpeaking(false)
     utt.onerror = () => setSpeaking(false)
@@ -810,8 +831,8 @@ const CSS = `
 @keyframes bc-tail-sway { 0%,100% { transform: rotate(0); } 33% { transform: rotate(5deg); } 66% { transform: rotate(-5deg); } }
 @keyframes bc-squash {
   0% { transform: scale(1, 1); }
-  35% { transform: scale(0.84, 1.16); }
-  70% { transform: scale(1.07, 0.94); }
+  35% { transform: scale(0.94, 1.06); }
+  70% { transform: scale(1.04, 0.97); }
   100% { transform: scale(1, 1); }
 }
 @keyframes bc-purr {

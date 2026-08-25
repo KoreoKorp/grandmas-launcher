@@ -25,9 +25,12 @@ ASSETS = HERE / "assets"
 #    scales. Re-pick these for new reference art — see boxes.png. ──
 HEAD = (9, 0, 340, 204)      # bottom edge = neck seam, above the bow tie
 TAIL = (259, 109, 397, 263)  # left/bottom edges = tail-base seam
-TORSO = (6, 190, 368, 352)   # bottom edge = waist seam, below jacket hem
-LEGS = (18, 338, 354, 478)   # top edge tucks under the torso skirt; left edge
-                             # catches the dangling left paw (reaches y~460)
+TORSO = (6, 190, 368, 366)   # bottom skirt runs 14px past the jacket hem into
+                             # belly fur, so the ±7px bob never exposes the
+                             # legs' top edge
+LEGS = (18, 342, 354, 478)   # top overlaps the torso by 10px at the arm/hip
+                             # (vertical fur edges tolerate the vertical bob);
+                             # left edge catches the dangling left paw
 
 # ── Overlap skirts (natural px; ~2.27px per display px) ──
 HEAD_SKIRT_X = 16
@@ -36,9 +39,12 @@ HEAD_FADE = 10
 TAIL_SKIRT_X = 26
 TAIL_SKIRT_Y = 16
 TAIL_FADE = 12
-WAIST_FADE = 14              # torso's bottom skirt overlapping the legs.
-                             # Only the torso fades at the waist: fading both
-                             # sides made the overlap band semi-transparent.
+WAIST_SKIRT_X = (60, 335)    # x-range of the torso's belly skirt. Rows below
+                             # the hem (352) exist in BOTH layers inside this
+                             # range and ONLY in the torso outside it — keeps
+                             # the strong hem outline from doubling when the
+                             # torso bobs. All waist erases are HARD (feather
+                             # would make the seam semi-transparent).
 
 BG = (36, 64, 58, 255)       # --bg-card, so exposed seams show like in-app
 
@@ -74,7 +80,8 @@ def erase(img, box_abs, crop_box, feather=1.5):
     cx, cy = crop_box[0], crop_box[1]
     hole = Image.new("L", img.size, 255)
     ImageDraw.Draw(hole).rectangle((x0 - cx, y0 - cy, x1 - cx, y1 - cy), fill=0)
-    hole = hole.filter(ImageFilter.GaussianBlur(feather))
+    if feather > 0:
+        hole = hole.filter(ImageFilter.GaussianBlur(feather))
     img.putalpha(ImageChops.multiply(img.getchannel("A"), hole))
     return img
 
@@ -122,10 +129,14 @@ def main():
     sol, sot, sor, sob = TORSO
     lel, let, ler, leb = LEGS
 
-    # ── LEGS: planted anchor layer. Hard edges — the top edge lives under
-    #    the torso's fade zone, the rest is silhouette. ──
+    # ── LEGS: planted anchor layer. Belly columns (inside WAIST_SKIRT_X)
+    # start BELOW the hem outline so the hem lives in only one layer; arm and
+    # hip columns start at 342, overlapping the torso by 10px — vertical fur
+    # edges survive the vertical bob. Hard top edges everywhere: they are
+    # always covered by the torso's opaque skirt. ──
     legs_box = (lel, let, ler, leb)
     legs = cutout.crop(legs_box)
+    erase(legs, (WAIST_SKIRT_X[0] + 1, 342, WAIST_SKIRT_X[1], 352), legs_box, feather=0)
     legs.save(ASSETS / "layer-legs.png")
 
     # ── TAIL: skirt extends into the hip (left) and down past the old cut ──
@@ -134,12 +145,18 @@ def main():
                       bottom=tail_box[3] - tb, fade=TAIL_FADE)
     tail.save(ASSETS / "layer-tail.png")
 
-    # ── TORSO: shoulders to below the jacket hem. Holes where the head and
-    #    tail live; bottom skirt overlaps the legs' top. ──
+    # ── TORSO: shoulders to 14px below the jacket hem. Holes where the head
+    #    and tail live (hard-edged — the head/tail layers cover them exactly,
+    #    and a feathered hole edge goes translucent over the dark card).
+    #    Belly skirt rows 352-366 stay opaque (covers the legs' edge through
+    #    the full bob); outside the skirt x-range the torso ends at 352 so
+    #    the dangling arm lives in only one layer. ──
     torso_box = (sol, sot, sor, sob)
-    torso = faded_crop(cutout, torso_box, bottom=WAIST_FADE)
-    erase(torso, (hl + HEAD_SKIRT_X, ht, hr, hb - 8), torso_box)   # neck hole
-    erase(torso, (tl + 14, tt, tr, tb - 4), torso_box)             # tail hole
+    torso = cutout.crop(torso_box)
+    erase(torso, (hl + HEAD_SKIRT_X, ht, hr, hb - 8), torso_box, feather=0)   # neck hole
+    erase(torso, (tl + 14, tt, tr, tb - 4), torso_box, feather=0)             # tail hole
+    erase(torso, (sol, 352, WAIST_SKIRT_X[0] - 1, 366), torso_box, feather=0)   # left of skirt
+    erase(torso, (WAIST_SKIRT_X[1], 352, sor, 366), torso_box, feather=0)     # right of skirt
     torso.save(ASSETS / "layer-torso.png")
 
     # ── HEAD: skirt left + below only (right would slice into the tail's
@@ -198,16 +215,17 @@ def main():
         d.line((px, py - 14, px, py + 14), fill=(255, 255, 0, 255), width=3)
     vis.convert("RGB").save(HERE / "boxes.png")
 
-    # ── gap-check.png: extreme poses; torso at tap-squash scale (the
-    #    harshest waist-seam stress) ──
+    # ── gap-check.png: extreme poses. Torso at the bob's top extreme (dy -7,
+    #    the waist seam's worst case) combined with tap-squash scale. ──
     cell = 320
     sheet = Image.new("RGBA", (cell * 3, cell * 3), BG)
+    bobbed_torso_box = (torso_box[0], torso_box[1] - 7, torso_box[2], torso_box[3] - 7)
     for i, hdeg in enumerate((-14, 0, 14)):
         for j, tdeg in enumerate((-24, 0, 16)):  # actual animation extremes
             frame = Image.new("RGBA", cutout.size, (0, 0, 0, 0))
             frame.alpha_composite(legs, legs_box[:2])
             rotated_paste(frame, tail, tail_box, tdeg, tail_origin)
-            scaled_paste(frame, torso, torso_box, 0.86, 1.14, torso_origin)
+            scaled_paste(frame, torso, bobbed_torso_box, 0.94, 1.06, torso_origin)
             rotated_paste(frame, head, head_box, hdeg, head_origin)
             s = cell / max(frame.size)
             frame = frame.resize((int(frame.size[0] * s), int(frame.size[1] * s)))

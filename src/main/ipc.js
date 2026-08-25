@@ -224,7 +224,7 @@ export function registerIPC() {
   ipcMain.handle('launcher:ask-ai', async (event, { message }) => {
     const apiKey = store.get('ai.openrouterKey') || process.env.OPENROUTER_API_KEY
     if (!apiKey) return { error: 'no-key' }
-    const model = store.get('ai.model') || 'google/gemini-2.0-flash-001'
+    const model = store.get('ai.model') || 'google/gemma-4-31b-it:free'
     const userName = store.get('userName') || 'Grandma'
     const tiles = store.get('tiles') || []
 
@@ -364,7 +364,7 @@ RULES:
   ipcMain.handle('admin:generate-digest', async () => {
     const apiKey = store.get('ai.openrouterKey') || process.env.OPENROUTER_API_KEY
     if (!apiKey) return { error: 'no-key' }
-    const model = store.get('ai.model') || 'poolside/laguna-m.1:free'
+    const model = store.get('ai.digestModel') || 'google/gemma-4-31b-it:free'
     const userName = store.get('userName') || 'Grandma'
     const log = store.get('activityLog') || []
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
