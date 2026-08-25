@@ -89,23 +89,32 @@ export default function BuddyCat() {
   const modeRef = useRef(mode)
   modeRef.current = mode
 
-  /* ── Pick the warmest available TTS voice (Windows ships robotic defaults;
-     Natural/Aria/Jenny sound far better when installed) ── */
+  /* ── Pick the warmest available TTS voice. Windows voices enumerate
+     lazily (and voiceschanged is unreliable in Electron), so poll briefly.
+     Note: Electron only sees SAPI voices — the modern "Natural" voices
+     from Windows Settings are frequently Edge-only and won't appear. ── */
   useEffect(() => {
     if (!hasTTS) return
+    let tries = 0
+    let timer
     function pickVoice() {
-      const voices = window.speechSynthesis.getVoices().filter(v => v.lang?.startsWith('en'))
-      if (!voices.length) return
+      const voices = window.speechSynthesis.getVoices()
+      if (!voices.length && tries++ < 20) { timer = setTimeout(pickVoice, 500); return }
       const score = v =>
-        (/natural/i.test(v.name) ? 100 : 0) +
+        (/natural|neural/i.test(v.name) ? 100 : 0) +
         (/aria|jenny|emma|ava|libby|sonia/i.test(v.name) ? 50 : 0) +
-        (/zira/i.test(v.name) ? 20 : 0) +
-        (v.lang === 'en-US' ? 10 : 0)
-      voiceRef.current = [...voices].sort((a, b) => score(b) - score(a))[0] ?? null
+        (/zira|female/i.test(v.name) ? 20 : 0) +
+        (/^en/i.test(v.lang || '') ? 10 : -100)
+      const best = [...voices].sort((a, b) => score(b) - score(a))[0] ?? null
+      if (best) voiceRef.current = best
+      console.log('[buddy] TTS voices:', voices.map(v => v.name).join(' | ') || '(none)', '→ picked:', best?.name)
     }
     pickVoice()
     window.speechSynthesis.addEventListener('voiceschanged', pickVoice)
-    return () => window.speechSynthesis.removeEventListener('voiceschanged', pickVoice)
+    return () => {
+      clearTimeout(timer)
+      window.speechSynthesis.removeEventListener('voiceschanged', pickVoice)
+    }
   }, [])
 
   /* ── Speech bubble ── */
@@ -192,7 +201,7 @@ export default function BuddyCat() {
       if (modeRef.current === 'pet' && driftRef.current) {
         if (Math.random() < 0.007) wTarget = pick([-34, 0, 0, 34])
         wx += (wTarget - wx) * 0.02
-        const lean = Math.max(-3, Math.min(3, (wTarget - wx) * 0.06))
+        const lean = Math.max(-2, Math.min(2, (wTarget - wx) * 0.045))
         driftRef.current.style.transform = `translateX(${wx.toFixed(2)}px) rotate(${lean.toFixed(2)}deg)`
       }
       raf = requestAnimationFrame(tick)
@@ -272,7 +281,9 @@ export default function BuddyCat() {
     if (result.error === 'no-key') {
       reply = "Oh dear, I'm not set up yet! Ask a family member to add an OpenRouter API key in the Admin Panel. Then I can help!"
     } else if (result.error) {
-      reply = "I'm having trouble connecting right now. Let's try again in a moment!"
+      // Surface the real reason (bad key, no credits, rate limit...) so
+      // caregivers can actually diagnose it instead of a generic shrug.
+      reply = `I'm having trouble connecting — ${result.error}`
     } else {
       reply = result.reply
     }
@@ -760,7 +771,7 @@ const CSS = `
 
 .bc-float {
   position: absolute; inset: 0; display: block;
-  animation: bc-bob 3.6s ease-in-out infinite;
+  animation: bc-bob 4.2s ease-in-out infinite;
 }
 .bc-torso {
   left: 6px; top: 190px; width: 362px; height: 162px;
@@ -810,16 +821,16 @@ const CSS = `
   width: 128px; height: 15px; border-radius: 50%;
   background: radial-gradient(ellipse at center, rgba(0,0,0,0.55) 0%, transparent 70%);
   filter: blur(2px);
-  animation: bc-shadow-pulse 3.6s ease-in-out infinite;
+  animation: bc-shadow-pulse 4.2s ease-in-out infinite;
   pointer-events: none;
 }
 
 .bc-typing { animation: pulse 1.2s ease-in-out infinite; color: var(--accent); letter-spacing: 2; }
 
-@keyframes bc-bob { 0%,100% { translate: 0 -7px; } 50% { translate: 0 7px; } }
+@keyframes bc-bob { 0%,100% { translate: 0 -4px; } 50% { translate: 0 4px; } }
 @keyframes bc-shadow-pulse {
   0%,100% { transform: translateX(-50%) scaleX(1); opacity: 0.5; }
-  50% { transform: translateX(-50%) scaleX(0.82); opacity: 0.32; }
+  50% { transform: translateX(-50%) scaleX(0.86); opacity: 0.36; }
 }
 @keyframes bc-breathe {
   0% { transform: scale(1, 1); }
