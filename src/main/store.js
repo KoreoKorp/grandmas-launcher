@@ -211,6 +211,22 @@ if (!store.get('migrations.aiTileRemoved')) {
   store.set('migrations.aiTileRemoved', true)
 }
 
+// Purge stale OpenRouter model slugs that were never valid ids on OpenRouter
+// (e.g. google/gemini-2.0-flash-001 is a Google AI Studio name, not an
+// OpenRouter slug). A stored bogus value overrides the verified free default
+// in ipc.js and every chat call fails with "No endpoints found". If the
+// stored model is not on the known-bad list, it's left alone — caregivers
+// may have set a real one deliberately.
+const KNOWN_BAD_MODELS = [
+  'google/gemini-2.0-flash-001',
+  'anthropic/claude-haiku-4-5-20251001',
+  'openrouter/owl-alpha',
+  'poolside/laguna-m.1:free',
+]
+if (KNOWN_BAD_MODELS.includes(store.get('ai.model'))) {
+  store.delete('ai.model')
+}
+
 // Family Radio ambient stream can be turned off by the caregiver. Default on
 // (setting !== false) so a missing/legacy config still surfaces clips — matches
 // the renderer's `config.familyRadio?.enabled !== false` check. Read live so the
