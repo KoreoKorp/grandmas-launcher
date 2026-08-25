@@ -83,6 +83,7 @@ export default function BuddyCat() {
   const heartsRef = useRef(null)
   const recognitionRef = useRef(null)
   const voiceRef = useRef(null)
+  const audioRef = useRef(null)
   const bubbleTimerRef = useRef(null)
   const hideTimerRef = useRef(null)
   const moodTimerRef = useRef(null)
@@ -239,8 +240,18 @@ export default function BuddyCat() {
     return `${t}! I'm Buddy. How can I help you today?`
   }
 
-  function speak(text) {
-    if (!hasTTS) return
+  function stopSpeaking() {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
+    window.speechSynthesis?.cancel()
+    setSpeaking(false)
+  }
+
+  // Local fallback voice (SAPI) — used when the cloud voice is off/unreachable
+  function speakLocal(text) {
+    if (!hasTTS) { setSpeaking(false); return }
     window.speechSynthesis.cancel()
     const utt = new SpeechSynthesisUtterance(text)
     if (voiceRef.current) utt.voice = voiceRef.current
@@ -250,6 +261,24 @@ export default function BuddyCat() {
     utt.onend = () => setSpeaking(false)
     utt.onerror = () => setSpeaking(false)
     window.speechSynthesis.speak(utt)
+  }
+
+  async function speak(text) {
+    if (!autoSpeak) return
+    stopSpeaking()
+    try {
+      const res = await window.launcher.speakTTS?.(text)
+      if (res?.audio) {
+        const audio = new Audio(`data:audio/mp3;base64,${res.audio}`)
+        audioRef.current = audio
+        audio.onplay = () => setSpeaking(true)
+        audio.onended = () => { if (audioRef.current === audio) { audioRef.current = null; setSpeaking(false) } }
+        audio.onerror = () => { if (audioRef.current === audio) { audioRef.current = null; speakLocal(text) } }
+        await audio.play()
+        return
+      }
+    } catch { /* fall through to the local voice */ }
+    speakLocal(text)
   }
 
   function startListening() {

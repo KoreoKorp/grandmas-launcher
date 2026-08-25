@@ -7,6 +7,7 @@ import { fetchWeather, clearWeatherCache } from './weather.js'
 import { expandLauncher } from './windows.js'
 import { getMessengerPort, getMessengerUrl, updateMessengerConfig, syncMessengerContacts } from './serverManager.js'
 import { enableAdBlockingFor } from './adBlocker.js'
+import { synthesize as synthesizeTTS, dropClient as dropTTSClient, cloudTTSEnabled, ttsVoice } from './tts.js'
 
 const PINTEREST_AD_CSS = `
   [data-test-id="ad-label"], [data-test-id*="promoted"], [data-test-id*="ad-pin"],
@@ -25,6 +26,39 @@ let lastBrowserActivity = Date.now()
 let _emitSignal = null
 export function setSignalEmitter(fn) { _emitSignal = fn }
 function emitSignal(event, data) { if (_emitSignal) _emitSignal(event, data) }
+
+// ── Claude (Anthropic Messages API) — shared by Buddy chat + caregiver digest ──
+function claudeKey() {
+  return store.get('ai.anthropicKey') || process.env.ANTHROPIC_API_KEY
+}
+
+function claudeModel() {
+  // claude-haiku-4-5 is Anthropic's fast/cheap tier; override with ai.model
+  // only if a caregiver set a real model id deliberately.
+  return store.get('ai.model') || 'claude-haiku-4-5'
+}
+
+async function callClaude(system, messages, maxTokens = 300) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': claudeKey(),
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ model: claudeModel(), max_tokens: maxTokens, system, messages })
+  })
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}))
+    const msg = errData?.error?.message || `API error ${res.status}`
+    console.error('[claude] error:', res.status, msg)
+    throw new Error(msg)
+  }
+  const data = await res.json()
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('')
+  if (!text) throw new Error('empty-response')
+  return text
+}
 
 export function setWindows(launcher, admin) {
   launcherWin = launcher
@@ -60,7 +94,7 @@ export function registerIPC() {
     photos: store.get('photos'),
     familyRadio: store.get('familyRadio'),
     userName: store.get('userName'),
-    ai: { available: !!(store.get('ai.openrouterKey') || process.env.OPENROUTER_API_KEY) }
+    ai: { available: !!(store.get('ai.anthropicKey') || process.env.ANTHROPIC_API_KEY) }
   }))
 
   ipcMain.handle('launcher:get-weather', async () => {
@@ -222,9 +256,8 @@ export function registerIPC() {
   }
 
   ipcMain.handle('launcher:ask-ai', async (event, { message }) => {
-    const apiKey = store.get('ai.openrouterKey') || process.env.OPENROUTER_API_KEY
+    const apiKey = claudeKey()
     if (!apiKey) return { error: 'no-key' }
-    const model = store.get('ai.model') || 'google/gemma-4-31b-it:free'
     const userName = store.get('userName') || 'Grandma'
     const tiles = store.get('tiles') || []
 
@@ -247,39 +280,13 @@ RULES:
 - NEVER mention you are an AI, a model, or anything technical`
 
     const history = getAIHistory()
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      ...history,
-      { role: 'user', content: message }
-    ]
-
     try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'grandmas-launcher',
-          'X-Title': "Grandma's Launcher"
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          max_tokens: 300,
-          temperature: 0.85
-        })
-      })
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        return { error: errData?.error?.message || `API error ${res.status}` }
-      }
-      const data = await res.json()
-      const reply = data.choices?.[0]?.message?.content
-      if (!reply) return { error: 'empty-response' }
-
+      // Anthropic requires the conversation to start with a user turn — drop
+      // the assistant greeting that leads stored history.
+      const chat = history.filter((m, i) => !(i === 0 && m.role === 'assistant'))
+      const reply = await callClaude(systemPrompt, [...chat, { role: 'user', content: message }])
       const updated = [...history, { role: 'user', content: message }, { role: 'assistant', content: reply }]
       setAIHistory(updated)
-
       return { reply }
     } catch (err) {
       console.error('[ask-ai] error:', err)
@@ -295,6 +302,26 @@ RULES:
   ipcMain.handle('launcher:get-ai-history', () => {
     return getAIHistory()
   })
+
+  // ── Cloud TTS (Edge natural voices) ───────────────────────────────────────
+  ipcMain.handle('launcher:tts-speak', async (event, { text }) => {
+    if (!cloudTTSEnabled()) return { error: 'disabled' }
+    const clean = String(text || '').slice(0, 800)
+    if (!clean.trim()) return { error: 'empty' }
+    try {
+      const audio = await Promise.race([
+        synthesizeTTS(clean),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('tts timeout')), 10_000))
+      ])
+      return { audio, voice: ttsVoice() }
+    } catch (err) {
+      console.error('[tts] error:', err.message)
+      dropTTSClient()
+      return { error: err.message }
+    }
+  })
+
+  ipcMain.handle('launcher:tts-voices', () => ({ enabled: cloudTTSEnabled(), voice: ttsVoice() }))
 
   ipcMain.handle('launcher:get-family-radio-queue', async () => {
     const url = getMessengerUrl()
@@ -362,9 +389,8 @@ RULES:
   // ── Admin ─────────────────────────────────────────────────────────────────
 
   ipcMain.handle('admin:generate-digest', async () => {
-    const apiKey = store.get('ai.openrouterKey') || process.env.OPENROUTER_API_KEY
+    const apiKey = claudeKey()
     if (!apiKey) return { error: 'no-key' }
-    const model = store.get('ai.digestModel') || 'google/gemma-4-31b-it:free'
     const userName = store.get('userName') || 'Grandma'
     const log = store.get('activityLog') || []
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
@@ -376,31 +402,11 @@ RULES:
         }).join('\n')
       : 'No logged activity in the past 7 days.'
     try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'grandmas-launcher',
-          'X-Title': "Grandma's Launcher"
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: 'system',
-              content: `You are a helpful assistant summarizing activity data for a caregiver. Write a warm, concise 3–5 sentence paragraph about how ${userName} has been using her tablet over the past week. Note patterns, highlights, or anything a caregiver should know. Write in third person. Be factual, gentle, and easy to read at a glance.`
-            },
-            { role: 'user', content: `${userName}'s recent activity log:\n\n${logText}` }
-          ],
-          max_tokens: 350,
-          // Disable reasoning (see ask-ai handler) so the digest text lands in content.
-          reasoning: { enabled: false }
-        })
-      })
-      const data = await res.json()
-      const digest = data.choices?.[0]?.message?.content
-      if (!digest) return { error: 'empty-response' }
+      const digest = await callClaude(
+        `You are a helpful assistant summarizing activity data for a caregiver. Write a warm, concise 3–5 sentence paragraph about how ${userName} has been using her tablet over the past week. Note patterns, highlights, or anything a caregiver should know. Write in third person. Be factual, gentle, and easy to read at a glance.`,
+        [{ role: 'user', content: `${userName}'s recent activity log:\n\n${logText}` }],
+        350
+      )
       return { digest, generatedAt: Date.now(), entryCount: recent.length }
     } catch (err) {
       console.error('[digest] error:', err)

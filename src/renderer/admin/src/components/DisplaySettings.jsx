@@ -1,10 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 export default function DisplaySettings({ display, onSave }) {
   const [fontScale, setFontScale] = useState(display.fontScale)
   const [saved, setSaved] = useState(false)
   const [openrouterKey, setOpenrouterKey] = useState('')
   const [aiKeySaved, setAiKeySaved] = useState(false)
+  const [cloudTTS, setCloudTTS] = useState(true)
   const [volumeLevel, setVolumeLevel] = useState(display.volumeLevel ?? 40)
   const [volumeSaved, setVolumeSaved] = useState(false)
   const [ambientBackground, setAmbientBackground] = useState(display.ambientBackground !== false)
@@ -12,6 +13,15 @@ export default function DisplaySettings({ display, onSave }) {
   async function saveAmbient(next) {
     setAmbientBackground(next)
     await onSave({ ambientBackground: next })
+  }
+
+  useEffect(() => {
+    window.admin.getConfig().then(c => setCloudTTS(c.ai?.cloudTTS !== false)).catch(() => {})
+  }, [])
+
+  async function saveCloudTTS(next) {
+    setCloudTTS(next)
+    await window.admin.set('ai.cloudTTS', next)
   }
 
   const [newPin, setNewPin] = useState('')
@@ -153,15 +163,15 @@ export default function DisplaySettings({ display, onSave }) {
           </div>
         )}
         <div className="field">
-          <label>OpenRouter API Key</label>
+          <label>Claude API Key (Anthropic)</label>
           <input
             type="password"
             value={openrouterKey}
             onChange={e => setOpenrouterKey(e.target.value)}
-            placeholder={display.aiKeySet ? '(leave blank to keep existing key)' : 'sk-or-…'}
+            placeholder={display.aiKeySet ? '(leave blank to keep existing key)' : 'sk-ant-…'}
           />
           <div style={{ fontSize: '0.82em', color: 'var(--text-dim)', marginTop: 4 }}>
-            Get a free key at openrouter.ai. Powers the "Ask AI" tile on the home screen.
+            Get a key at console.anthropic.com. Powers Buddy the cat and the weekly digest.
           </div>
         </div>
         <div className="row">
@@ -180,6 +190,15 @@ export default function DisplaySettings({ display, onSave }) {
           </button>
           {aiKeySaved && <span className="saved-notice">Saved!</span>}
         </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, cursor: 'pointer', fontSize: '0.9em' }}>
+          <input
+            type="checkbox"
+            checked={cloudTTS}
+            onChange={e => saveCloudTTS(e.target.checked)}
+          />
+          Natural cloud voice for Buddy (needs internet; falls back to the
+          local Windows voice offline)
+        </label>
       </div>
 
       <div className="card" style={{ color: 'var(--text-dim)', fontSize: '0.9em' }}>

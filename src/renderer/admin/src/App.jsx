@@ -265,7 +265,7 @@ export default function App() {
           )}
           {activeTab === 'display' && (
             <DisplaySettings
-              display={{ ...config.display, aiKeySet: !!(config.ai?.openrouterKey) }}
+              display={{ ...config.display, aiKeySet: !!(config.ai?.anthropicKey) }}
               onSave={d => save('display', { ...config.display, ...d })}
             />
           )}
@@ -307,7 +307,7 @@ export default function App() {
           )}
           {activeTab === 'log' && <ActivityLog />}
           {activeTab === 'digest' && (
-            <AIDailyDigest aiKeySet={!!(config.ai?.openrouterKey)} />
+            <AIDailyDigest aiKeySet={!!(config.ai?.anthropicKey)} />
           )}
           {activeTab === 'restore' && <ConfigRestore />}
           {activeTab === 'wizard' && (

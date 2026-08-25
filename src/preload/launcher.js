@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('launcher', {
   askAI: (message) => ipcRenderer.invoke('launcher:ask-ai', { message }),
   clearAIHistory: () => ipcRenderer.invoke('launcher:clear-ai-history'),
   getAIHistory: () => ipcRenderer.invoke('launcher:get-ai-history'),
+  speakTTS: (text) => ipcRenderer.invoke('launcher:tts-speak', { text }),
+  ttsInfo: () => ipcRenderer.invoke('launcher:tts-voices'),
   getGameIcon: (path) => ipcRenderer.invoke('launcher:get-game-icon', { path }),
   getFamilyRadioQueue: () => ipcRenderer.invoke('launcher:get-family-radio-queue'),
   markFamilyRadioPlayed: (id) => ipcRenderer.invoke('launcher:mark-family-radio-played', { id }),
