@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 
 const TILE_TYPES = ['web', 'app', 'built-in']
-const BUILT_IN_TARGETS = ['photos', 'weather', 'messages', 'music', 'games']
+const BUILT_IN_TARGETS = ['photos', 'weather', 'messages', 'music', 'games', 'whoshome']
 
 const DEFAULT_TILES = [
   { id: 'news',      type: 'web',      icon: '📰',  label: 'News',     target: 'https://apnews.com',            kiosk: false },
@@ -12,7 +12,8 @@ const DEFAULT_TILES = [
   { id: 'games',     type: 'built-in', icon: '🎮',  label: 'Games',    target: 'games' },
   { id: 'weather',   type: 'built-in', icon: '🌤️', label: 'Weather',  target: 'weather' },
   { id: 'messages',  type: 'built-in', icon: '💬',  label: 'Messages', target: 'messages' },
-  { id: 'music',     type: 'built-in', icon: '🎵',  label: 'Music',    target: 'music' }
+  { id: 'music',     type: 'built-in', icon: '🎵',  label: 'Music',    target: 'music' },
+  { id: 'whos-home', type: 'built-in', icon: '🏡',  label: "Who's Home?", target: 'whoshome' }
 ]
 
 function isImagePath(icon) {

@@ -7,6 +7,8 @@ import PhotosView from './views/PhotosView'
 import HelpOverlay from './components/HelpOverlay'
 import ConfusionOverlay from './components/ConfusionOverlay'
 import WeatherOverlay from './components/WeatherOverlay'
+import WhosHomeOverlay from './components/WhosHomeOverlay'
+import TilePickerOverlay from './components/TilePickerOverlay'
 import NavBar from './components/NavBar'
 import IncomingCallOverlay from './components/IncomingCallOverlay'
 import VideoCallOverlay from './components/VideoCallOverlay'
@@ -21,6 +23,8 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false)
   const [showConfusion, setShowConfusion] = useState(false)
   const [showWeather, setShowWeather] = useState(false)
+  const [showWhosHome, setShowWhosHome] = useState(false)
+  const [showTilePicker, setShowTilePicker] = useState(false)
   const [browserLoaded, setBrowserLoaded] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
   const [showCheckin, setShowCheckin] = useState(false)
@@ -126,6 +130,80 @@ export default function App() {
       setBrowserLoaded(true)
     })
     return () => { cleanupOpen(); cleanupClose(); cleanupLoaded() }
+  }, [])
+
+  // Keyboard shortcuts (mirror the on-screen buttons so the pair works whether
+  // or not she can land a tap). These fire while the launcher renderer holds
+  // focus — the home screen and the built-in views. When a website is open the
+  // BrowserView has focus instead, so Alt+Left / Alt+Down / Esc are handled
+  // again in the main process (see openEmbeddedBrowser in ipc.js).
+  //   Alt+Left ...... Back        Alt+Down ...... Home
+  //   Alt+Up ........ open the "choose a screen" picker (also works from a site)
+  //   Esc ........... close the overlay that's on top
+  //   Ctrl+= / Ctrl+- font size up / down (persists)
+  //   1–9 / 0 (home)  open that tile (0 = the 10th)
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const t = e.target
+      const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
+      const anyOverlay = showHelp || showConfusion || showWeather || showWhosHome || showCheckin || showTilePicker
+      const inCall = incomingCall || activeCall
+
+      if (e.key === 'Escape' && !e.altKey && !e.ctrlKey && !e.shiftKey) {
+        if (inCall) return   // never let Esc drop a live call
+        if (anyOverlay) {
+          e.preventDefault()
+          setShowHelp(false); setShowConfusion(false); setShowWeather(false)
+          setShowWhosHome(false); setShowCheckin(false); setShowTilePicker(false)
+        }
+        return
+      }
+
+      if (e.altKey && e.key === 'ArrowLeft') {            // Back
+        e.preventDefault()
+        if (view === 'browser') window.launcher.browserBack()
+        else if (view !== 'home') goHome()
+        return
+      }
+      if (e.altKey && e.key === 'ArrowDown') {            // Home
+        e.preventDefault()
+        goHome()
+        return
+      }
+      if (e.altKey && e.key === 'ArrowUp') {              // Choose-a-screen picker
+        if (inCall) return
+        e.preventDefault()
+        setShowTilePicker(true)
+        return
+      }
+
+      // The picker owns the keyboard while it's open (it stops propagation for
+      // the keys it uses); nothing below should run underneath it.
+      if (showTilePicker) return
+
+      if (e.ctrlKey && !e.altKey && (e.key === '=' || e.key === '+')) {
+        e.preventDefault(); window.launcher.nudgeFontScale(1); return
+      }
+      if (e.ctrlKey && !e.altKey && (e.key === '-' || e.key === '_')) {
+        e.preventDefault(); window.launcher.nudgeFontScale(-1); return
+      }
+
+      if (!typing && view === 'home' && !anyOverlay && !inCall &&
+          !e.ctrlKey && !e.altKey && !e.metaKey && /^[0-9]$/.test(e.key)) {
+        const n = e.key === '0' ? 10 : Number(e.key)
+        const tile = config?.tiles?.[n - 1]
+        if (tile) { e.preventDefault(); handleTileOpen(tile) }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [view, config, showHelp, showConfusion, showWeather, showWhosHome, showCheckin, showTilePicker, incomingCall, activeCall])
+
+  // Alt+Up while a website is open is caught in the main process (the
+  // BrowserView has focus); it sends us back home and asks for the picker.
+  useEffect(() => {
+    const cleanup = window.launcher.onOpenTilePicker(() => setShowTilePicker(true))
+    return cleanup
   }, [])
 
   // Network offline tile shift seamlessly
@@ -310,6 +388,10 @@ export default function App() {
     setView('home')
     setShowHelp(false)
     setShowConfusion(false)
+    setShowWeather(false)
+    setShowWhosHome(false)
+    setShowCheckin(false)
+    setShowTilePicker(false)
   }
 
   function handleTileOpen(tile) {
@@ -339,6 +421,7 @@ export default function App() {
         return
       }
       if (tile.target === 'weather') setShowWeather(true)
+      if (tile.target === 'whoshome') setShowWhosHome(true)
     }
     window.launcher.logActivity('tile-open', tile.target)
   }
@@ -485,6 +568,18 @@ export default function App() {
         <WeatherOverlay
           weathers={weatherList}
           onClose={() => setShowWeather(false)}
+        />
+      )}
+
+      {showWhosHome && (
+        <WhosHomeOverlay onClose={() => setShowWhosHome(false)} />
+      )}
+
+      {showTilePicker && (
+        <TilePickerOverlay
+          tiles={effectiveConfig.tiles}
+          onPick={tile => { setShowTilePicker(false); handleTileOpen(tile) }}
+          onClose={() => setShowTilePicker(false)}
         />
       )}
 

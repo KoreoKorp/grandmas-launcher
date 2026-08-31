@@ -6,7 +6,7 @@ import { writeFile } from 'fs/promises'
 import { rmSync } from 'fs'
 import { io } from 'socket.io-client'
 import { createWindows, expandLauncher } from './windows.js'
-import { registerIPC, setWindows, forceGoHome, setupLauncherPermissions, setSignalEmitter, closeEmbeddedBrowser } from './ipc.js'
+import { registerIPC, setWindows, forceGoHome, setupLauncherPermissions, setSignalEmitter, closeEmbeddedBrowser, prewarmPhotoThumbnails } from './ipc.js'
 import { fetchWeather } from './weather.js'
 import { store, logActivity } from './store.js'
 import { initMessengerServer, getMessengerUrl, stopMessengerServer } from './serverManager.js'
@@ -64,6 +64,7 @@ app.whenReady().then(async () => {
   registerWatchdogTask()
   sendBootHealthReport()
   initAdBlocker() // async, non-blocking — enableAdBlockingFor() fails open until ready
+  prewarmPhotoThumbnails() // background: fill the Photos thumbnail cache before she opens it
 
   app.on('activate', () => {
     if (!launcher || launcher.isDestroyed()) {

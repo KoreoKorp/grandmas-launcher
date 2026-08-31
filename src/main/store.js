@@ -11,12 +11,12 @@ const defaults = {
     { id: 'games',     type: 'built-in', icon: '🎮',  label: 'Games',    target: 'games' },
     { id: 'weather',   type: 'built-in', icon: '🌤️', label: 'Weather',  target: 'weather' },
     { id: 'messages',  type: 'built-in', icon: '💬',  label: 'Messages', target: 'messages' },
-    { id: 'music',     type: 'built-in', icon: '🎵',  label: 'Music',    target: 'music' }
+    { id: 'music',     type: 'built-in', icon: '🎵',  label: 'Music',    target: 'music' },
+    { id: 'whos-home', type: 'built-in', icon: '🏡',  label: "Who's Home?", target: 'whoshome' }
   ],
   reminders: [],
   contacts: [],
   dailyNote: '',
-  adminPin: '',
   weather: {
     location: '',
     unit: 'F',
@@ -64,18 +64,25 @@ const defaults = {
     onlineUrl: 'https://www.pogo.com'
   },
   ai: {
-    openrouterKey: '',
-    model: 'google/gemini-2.0-flash-001',
+    anthropicKey: '',
+    model: 'claude-haiku-4-5',
     buddyHistory: []
   },
   photos: {
     albumUrl: '',
-    localPath: ''
+    localPath: '',
+    captions: {}
   },
   familyRadio: {
     enabled: true
   },
+  whosHome: {
+    enabled: true,
+    gateway: '',
+    people: []
+  },
   userName: 'Grandma',
+  setupCompleted: false,
   activityLog: [],
   remoteConfig: {
     url: 'https://chat.jeankellmansmith.com/config.json',
@@ -210,6 +217,44 @@ if (!store.get('migrations.aiTileRemoved')) {
   }
   store.set('migrations.aiTileRemoved', true)
 }
+
+// One-time migration: add the "Who's Home?" tile (skipped once caregivers
+// have had a chance to remove it).
+if (!store.get('migrations.whosHomeTileAdded')) {
+  const currentTiles = store.get('tiles') || []
+  if (!currentTiles.some(t => t.target === 'whoshome')) {
+    store.set('tiles', [...currentTiles, { id: 'whos-home', type: 'built-in', icon: '🏡', label: "Who's Home?", target: 'whoshome' }])
+  }
+  store.set('migrations.whosHomeTileAdded', true)
+}
+
+// Give every saved presence entry a stable identity. Older builds stored only
+// { name, device }, which made every row look identical to the settings UI
+// after a restart (editing or deleting one row could affect all of them).
+{
+  const whosHome = store.get('whosHome') || {}
+  const people = Array.isArray(whosHome.people) ? whosHome.people : []
+  const seen = new Set()
+  let changed = false
+  const identified = people.map(person => {
+    let id = typeof person.id === 'string' && person.id.trim() ? person.id : ''
+    if (!id || seen.has(id)) {
+      id = crypto.randomUUID()
+      changed = true
+    }
+    seen.add(id)
+    return { ...person, id }
+  })
+  if (changed) store.set('whosHome.people', identified)
+}
+
+// Migrate the OpenRouter-era key field into the Claude key field the backend
+// actually reads (ipc.js -> claudeKey() reads ai.anthropicKey). Older builds
+// saved the entered key to ai.openrouterKey, which was silently ignored.
+if (store.get('ai.openrouterKey') && !store.get('ai.anthropicKey')) {
+  store.set('ai.anthropicKey', store.get('ai.openrouterKey'))
+}
+store.delete('ai.openrouterKey')
 
 // Purge stale OpenRouter model slugs that were never valid ids on OpenRouter
 // (e.g. google/gemini-2.0-flash-001 is a Google AI Studio name, not an

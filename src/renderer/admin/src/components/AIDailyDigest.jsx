@@ -14,7 +14,7 @@ export default function AIDailyDigest({ aiKeySet }) {
     const result = await window.admin.generateDigest()
     setLoading(false)
     if (result.error === 'no-key') {
-      setError('OpenRouter key not configured. Add it in Display Settings → AI Helper.')
+      setError('Claude API key not configured. Add it in Display Settings → AI Helper.')
     } else if (result.error) {
       setError(`Could not generate digest: ${result.error}`)
     } else {
@@ -34,7 +34,7 @@ export default function AIDailyDigest({ aiKeySet }) {
 
         {!aiKeySet && (
           <div style={{ padding: '10px 14px', background: 'rgba(194,85,63,0.08)', border: '1px solid rgba(194,85,63,0.3)', borderRadius: 8, fontSize: '0.85em', color: 'var(--danger)', marginBottom: 14 }}>
-            OpenRouter key not set — go to Display Settings to add one.
+            Claude API key not set — go to Display Settings to add one.
           </div>
         )}
 

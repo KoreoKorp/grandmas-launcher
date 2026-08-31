@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react'
 export default function DisplaySettings({ display, onSave }) {
   const [fontScale, setFontScale] = useState(display.fontScale)
   const [saved, setSaved] = useState(false)
-  const [openrouterKey, setOpenrouterKey] = useState('')
+  const [anthropicKey, setAnthropicKey] = useState('')
   const [aiKeySaved, setAiKeySaved] = useState(false)
   const [cloudTTS, setCloudTTS] = useState(true)
   const [volumeLevel, setVolumeLevel] = useState(display.volumeLevel ?? 40)
@@ -24,10 +24,6 @@ export default function DisplaySettings({ display, onSave }) {
     await window.admin.set('ai.cloudTTS', next)
   }
 
-  const [newPin, setNewPin] = useState('')
-  const [confirmPin, setConfirmPin] = useState('')
-  const [pinMsg, setPinMsg] = useState(null) // { ok, text }
-
   async function saveFont() {
     await onSave({ fontScale })
     setSaved(true)
@@ -39,21 +35,6 @@ export default function DisplaySettings({ display, onSave }) {
     await onSave({ volumeLevel: safe })
     setVolumeSaved(true)
     setTimeout(() => setVolumeSaved(false), 2000)
-  }
-
-  async function savePin() {
-    if (newPin.length < 4) { setPinMsg({ ok: false, text: 'PIN must be at least 4 digits.' }); return }
-    if (newPin !== confirmPin) { setPinMsg({ ok: false, text: 'PINs do not match.' }); return }
-    await window.admin.set('adminPin', newPin)
-    setNewPin(''); setConfirmPin('')
-    setPinMsg({ ok: true, text: 'PIN saved!' })
-    setTimeout(() => setPinMsg(null), 3000)
-  }
-
-  async function clearPin() {
-    await window.admin.set('adminPin', '')
-    setPinMsg({ ok: true, text: 'PIN removed — admin panel is now open access.' })
-    setTimeout(() => setPinMsg(null), 4000)
   }
 
   return (
@@ -117,47 +98,9 @@ export default function DisplaySettings({ display, onSave }) {
         </div>
       </div>
 
-      <h2>Admin PIN</h2>
+      <h2>AI Helper (Claude)</h2>
       <div className="card">
-        <p style={{ color: 'var(--text-dim)', fontSize: '0.9em', marginBottom: 16 }}>
-          Set a PIN to prevent accidental access to the admin panel. Leave blank to disable.
-        </p>
-        <div className="row" style={{ marginBottom: 10 }}>
-          <div className="field" style={{ flex: 1, marginBottom: 0 }}>
-            <label>New PIN</label>
-            <input
-              type="password"
-              inputMode="numeric"
-              value={newPin}
-              onChange={e => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
-              placeholder="4–8 digits"
-            />
-          </div>
-          <div className="field" style={{ flex: 1, marginBottom: 0 }}>
-            <label>Confirm PIN</label>
-            <input
-              type="password"
-              inputMode="numeric"
-              value={confirmPin}
-              onChange={e => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
-              placeholder="Repeat PIN"
-            />
-          </div>
-        </div>
-        <div className="row">
-          <button className="btn btn-primary" onClick={savePin}>Set PIN</button>
-          <button className="btn btn-ghost" onClick={clearPin}>Remove PIN</button>
-          {pinMsg && (
-            <span style={{ fontSize: '0.85em', fontWeight: 600, color: pinMsg.ok ? 'var(--success)' : 'var(--danger)' }}>
-              {pinMsg.text}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <h2>AI Helper (OpenRouter)</h2>
-      <div className="card">
-        {display.aiKeySet && !aiKeySaved && !openrouterKey && (
+        {display.aiKeySet && !aiKeySaved && !anthropicKey && (
           <div style={{ fontSize: '0.85em', color: 'var(--success)', fontWeight: 600, marginBottom: 8 }}>
             ✓ API key is configured
           </div>
@@ -166,8 +109,8 @@ export default function DisplaySettings({ display, onSave }) {
           <label>Claude API Key (Anthropic)</label>
           <input
             type="password"
-            value={openrouterKey}
-            onChange={e => setOpenrouterKey(e.target.value)}
+            value={anthropicKey}
+            onChange={e => setAnthropicKey(e.target.value)}
             placeholder={display.aiKeySet ? '(leave blank to keep existing key)' : 'sk-ant-…'}
           />
           <div style={{ fontSize: '0.82em', color: 'var(--text-dim)', marginTop: 4 }}>
@@ -177,11 +120,11 @@ export default function DisplaySettings({ display, onSave }) {
         <div className="row">
           <button
             className="btn btn-primary"
-            disabled={!openrouterKey.trim()}
+            disabled={!anthropicKey.trim()}
             onClick={async () => {
-              if (!openrouterKey.trim()) return
-              await window.admin.set('ai.openrouterKey', openrouterKey.trim())
-              setOpenrouterKey('')
+              if (!anthropicKey.trim()) return
+              await window.admin.set('ai.anthropicKey', anthropicKey.trim())
+              setAnthropicKey('')
               setAiKeySaved(true)
               setTimeout(() => setAiKeySaved(false), 2000)
             }}

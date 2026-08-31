@@ -2,7 +2,7 @@ import { BrowserWindow, screen, globalShortcut, app } from 'electron'
 import { join } from 'path'
 import { writeFileSync } from 'fs'
 import { logActivity } from './store.js'
-import { forceGoHome } from './ipc.js'
+import { forceGoHome, closeEmbeddedBrowser } from './ipc.js'
 
 // Kept for the global admin shortcut — shortcut handlers outlive the
 // createWindows() call and need the current admin window
@@ -158,6 +158,20 @@ function registerLauncherShortcuts(win) {
 
   // Full exit: Ctrl+Shift+Q quits the launcher entirely
   globalShortcut.register('Ctrl+Shift+Q', quitLauncher)
+
+  // Recover a wedged screen: Ctrl+Shift+R reloads the launcher UI without a
+  // reboot. The process stays up so the watchdog never trips.
+  globalShortcut.register('Ctrl+Shift+R', () => reloadLauncher(win))
+}
+
+// Reload the launcher renderer in place. Tears down any embedded BrowserView
+// first (it's owned by the main process, so a plain renderer reload would
+// leave it floating over the fresh page).
+function reloadLauncher(win) {
+  if (!win || win.isDestroyed()) return
+  logActivity('launcher-reload-shortcut')
+  closeEmbeddedBrowser()
+  win.webContents.reloadIgnoringCache()
 }
 
 // Quit for real. The external watchdog (watchdog.ps1) relaunches the kiosk
@@ -225,5 +239,8 @@ function registerAlwaysOnShortcuts(win) {
 
   // Full exit must work regardless of focus too
   globalShortcut.register('Ctrl+Shift+Q', quitLauncher)
+
+  // Reload recovery — keep it available in the shrunk/always-on state too
+  globalShortcut.register('Ctrl+Shift+R', () => reloadLauncher(win))
 }
 

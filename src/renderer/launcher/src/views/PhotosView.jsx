@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import SpeakButton from '../components/SpeakButton'
 
 const SLIDESHOW_INTERVAL_MS = 5000
 
@@ -14,20 +15,33 @@ export default function PhotosView({ photosConfig, onBack }) {
   const hasAlbum = !!albumUrl
 
   useEffect(() => {
+    let cancelled = false
     window.launcher.getLocalPhotos().then(photos => {
+      if (cancelled) return
       setLocalPhotos(photos)
-      // Generate lightweight native thumbnails for the grid so we don't decode
-      // full-resolution images into memory. Full-res is used only in the lightbox.
-      Promise.all(
-        photos.map(p =>
-          window.launcher.getPhotoThumbnail(p.path).then(url => [p.path, url])
-        )
-      ).then(pairs => {
-        const map = {}
-        pairs.forEach(([path, url]) => { if (url) map[path] = url })
-        setThumbs(map)
-      })
+
+      // Paint each thumbnail as it arrives rather than waiting on every one
+      // first, but cap how many thumbnail requests are in flight at once
+      // instead of firing all of them simultaneously — a folder can have
+      // hundreds of photos. Cached thumbnails come straight off disk so this
+      // can run wider than the number of CPU cores without hurting.
+      const CONCURRENCY = 8
+      let nextIndex = 0
+      async function worker() {
+        while (!cancelled) {
+          const i = nextIndex++
+          if (i >= photos.length) return
+          const p = photos[i]
+          const url = await window.launcher.getPhotoThumbnail(p.path)
+          // She can back out to the home screen while thumbnails are still
+          // loading — without this guard, in-flight IPC calls would still
+          // land a setState after unmount.
+          if (!cancelled && url) setThumbs(prev => ({ ...prev, [p.path]: url }))
+        }
+      }
+      for (let w = 0; w < CONCURRENCY; w++) worker()
     })
+    return () => { cancelled = true }
   }, [])
 
   // If album fails to load, fall through to local
@@ -52,6 +66,15 @@ export default function PhotosView({ photosConfig, onBack }) {
     setSelectedIndex(i =>
       i === null ? i : (i + 1) % localPhotos.length
     )
+  }, [localPhotos.length])
+
+  const showRandom = useCallback((e) => {
+    e?.stopPropagation()
+    setSelectedIndex(i => {
+      if (i === null || localPhotos.length < 2) return i
+      const offset = 1 + Math.floor(Math.random() * (localPhotos.length - 1))
+      return (i + offset) % localPhotos.length
+    })
   }, [localPhotos.length])
 
   // Keyboard navigation (arrows to move, Esc to close)
@@ -117,13 +140,22 @@ export default function PhotosView({ photosConfig, onBack }) {
                     style={S.photoCard}
                     onClick={() => setSelectedIndex(i)}
                   >
-                    <img
-                      src={thumbs[photo.path] || photo.url}
-                      alt={photo.name}
-                      style={S.thumb}
-                      loading="lazy"
-                      decoding="async"
-                    />
+                    <div style={S.thumbFrame}>
+                      {thumbs[photo.path] ? (
+                        <img
+                          src={thumbs[photo.path]}
+                          alt={photo.name}
+                          style={S.thumb}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <div style={S.thumbPending} />
+                      )}
+                    </div>
+                    {photo.caption && (
+                      <div style={S.thumbCaption}>{photo.caption}</div>
+                    )}
                   </button>
                 ))}
               </div>
@@ -144,7 +176,10 @@ export default function PhotosView({ photosConfig, onBack }) {
       {selectedPhoto && (
         <div style={S.lightbox} onClick={closeLightbox}>
           {localPhotos.length > 1 && (
-            <button style={{ ...S.navArrow, ...S.navPrev }} onClick={showPrev} aria-label="Previous photo">‹</button>
+            <div style={{ ...S.navGroup, ...S.navGroupLeft }} onClick={e => e.stopPropagation()}>
+              <span style={S.navLabel}>PREVIOUS PICTURE</span>
+              <button style={S.navArrow} onClick={showPrev} aria-label="Previous photo">‹</button>
+            </div>
           )}
 
           <img
@@ -155,21 +190,36 @@ export default function PhotosView({ photosConfig, onBack }) {
           />
 
           {localPhotos.length > 1 && (
-            <button style={{ ...S.navArrow, ...S.navNext }} onClick={showNext} aria-label="Next photo">›</button>
+            <div style={{ ...S.navGroup, ...S.navGroupRight }} onClick={e => e.stopPropagation()}>
+              <span style={S.navLabel}>NEXT PICTURE</span>
+              <button style={S.navArrow} onClick={showNext} aria-label="Next photo">›</button>
+            </div>
           )}
 
           {/* Top-right controls */}
-          <div style={S.controls} onClick={e => e.stopPropagation()}>
-            {localPhotos.length > 1 && (
+          {localPhotos.length > 1 && (
+            <div style={S.controls} onClick={e => e.stopPropagation()}>
+              <button style={S.controlBtn} onClick={showRandom}>
+                🔀 Random Photo
+              </button>
               <button
                 style={{ ...S.controlBtn, ...(slideshow ? S.controlBtnActive : {}) }}
                 onClick={() => setSlideshow(s => !s)}
               >
                 {slideshow ? '⏸ Pause' : '▶ Slideshow'}
               </button>
-            )}
-            <button style={S.closeBtn} onClick={closeLightbox} aria-label="Close">✕</button>
-          </div>
+            </div>
+          )}
+
+          {selectedPhoto.caption && (
+            <div
+              style={{ ...S.captionBanner, bottom: localPhotos.length > 1 ? 76 : 24 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <span style={S.captionText}>{selectedPhoto.caption}</span>
+              <SpeakButton text={selectedPhoto.caption} size="md" />
+            </div>
+          )}
 
           {localPhotos.length > 1 && (
             <div style={S.counter}>{selectedIndex + 1} / {localPhotos.length}</div>
@@ -266,20 +316,55 @@ const S = {
     alignContent: 'start'
   },
   photoCard: {
+    display: 'flex',
+    flexDirection: 'column',
     border: '2px solid var(--border)',
     borderRadius: 'var(--radius-sm)',
-    overflow: 'hidden',
     cursor: 'pointer',
     background: 'var(--bg-card)',
     padding: 0,
-    aspectRatio: '1',
     transition: 'transform var(--transition-bounce), border-color var(--transition-fast), box-shadow var(--transition-smooth)'
   },
+  thumbFrame: {
+    width: '100%',
+    // padding-top percentage trick for a 1:1 frame. overflow:hidden lives
+    // here (not on photoCard) — as a grid item that's also a flex column
+    // with overflow:hidden, photoCard's own auto-height computation doesn't
+    // pick up a percentage/aspect-ratio-driven child height at all (collapses
+    // to ~3px regardless of which sizing technique the child uses, both
+    // aspect-ratio and this padding trick reproduced it identically). Keeping
+    // the clipping on this inner frame instead sidesteps that computation.
+    paddingTop: '100%',
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 'var(--radius-sm)',
+    flexShrink: 0
+  },
   thumb: {
+    position: 'absolute',
+    inset: 0,
     width: '100%',
     height: '100%',
-    objectFit: 'cover',
+    objectFit: 'contain',
     display: 'block'
+  },
+  thumbPending: {
+    position: 'absolute',
+    inset: 0,
+    background: 'var(--bg-card)'
+  },
+  thumbCaption: {
+    width: '100%',
+    padding: '6px 10px',
+    fontSize: 'calc(0.8em * var(--font-scale, 1))',
+    fontWeight: 600,
+    color: 'var(--text-secondary)',
+    background: 'var(--bg-card)',
+    borderTop: '1px solid var(--border-subtle)',
+    textAlign: 'left',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
   },
   emptyState: {
     display: 'flex',
@@ -349,43 +434,62 @@ const S = {
     borderColor: 'var(--accent)',
     color: 'var(--text-on-card)'
   },
-  closeBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: '50%',
-    background: 'rgba(255,255,255,0.15)',
-    border: '1px solid rgba(255,255,255,0.3)',
-    color: '#fff',
-    fontSize: '1.3em',
-    fontWeight: 700,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0
-  },
-  navArrow: {
+  navGroup: {
     position: 'absolute',
     top: '50%',
     transform: 'translateY(-50%)',
-    width: 72,
-    height: 72,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 12,
+    zIndex: 2
+  },
+  navGroupLeft: { left: 24 },
+  navGroupRight: { right: 24 },
+  navLabel: {
+    color: '#fff',
+    fontSize: '1.05em',
+    fontWeight: 800,
+    letterSpacing: '0.05em',
+    textShadow: '0 2px 6px rgba(0,0,0,0.7)',
+    whiteSpace: 'nowrap'
+  },
+  navArrow: {
+    width: 100,
+    height: 100,
     borderRadius: '50%',
     background: 'rgba(255,255,255,0.15)',
     border: '1px solid rgba(255,255,255,0.3)',
     color: '#fff',
-    fontSize: '2.6em',
+    fontSize: '3.6em',
     fontWeight: 700,
     lineHeight: 1,
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 6,
+    paddingBottom: 8
+  },
+  captionBanner: {
+    position: 'absolute',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    maxWidth: '80%',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 14,
+    padding: '10px 20px',
+    borderRadius: 20,
+    background: 'rgba(0,0,0,0.6)',
+    border: '1px solid rgba(255,255,255,0.2)',
     zIndex: 2
   },
-  navPrev: { left: 24 },
-  navNext: { right: 24 },
+  captionText: {
+    color: '#fff',
+    fontSize: 'calc(1.15em * var(--font-scale, 1))',
+    fontWeight: 700,
+    lineHeight: 1.4
+  },
   counter: {
     position: 'absolute',
     bottom: 24,

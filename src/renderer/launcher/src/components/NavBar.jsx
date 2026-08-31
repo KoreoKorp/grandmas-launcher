@@ -50,11 +50,11 @@ export default function NavBar({ url, weather, onHome, onBack, onHelp }) {
 
       {/* Navigation buttons */}
       <div style={S.btnGroup}>
-        <button style={S.homeBtn} onClick={onHome}>
+        <button style={S.homeBtn} onClick={onHome} title="Home (Alt+Down)">
           <span style={S.btnIcon}>🏠</span>
           <span>Home</span>
         </button>
-        <button style={S.backBtn} onClick={onBack}>
+        <button style={S.backBtn} onClick={onBack} title="Back (Alt+Left)">
           <span style={S.btnIcon}>←</span>
           <span>Back</span>
         </button>

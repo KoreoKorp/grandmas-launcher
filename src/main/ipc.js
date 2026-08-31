@@ -1,7 +1,9 @@
 import { ipcMain, shell, BrowserView, dialog, app, nativeImage } from 'electron'
 import { join, dirname, extname } from 'path'
-import { readdir } from 'fs/promises'
+import { readdir, readFile, writeFile, mkdir, stat } from 'fs/promises'
+import { createHash } from 'crypto'
 import os from 'os'
+import { exec } from 'child_process'
 import { store, logActivity, saveBackup, restoreBackup } from './store.js'
 import { fetchWeather, clearWeatherCache } from './weather.js'
 import { expandLauncher } from './windows.js'
@@ -27,6 +29,100 @@ let _emitSignal = null
 export function setSignalEmitter(fn) { _emitSignal = fn }
 function emitSignal(event, data) { if (_emitSignal) _emitSignal(event, data) }
 
+// ── Photo thumbnails ────────────────────────────────────────────────────────
+// createThumbnailFromPath (Windows Shell) is the slow part of loading the
+// Photos grid, and it re-runs from scratch every visit. Cache the encoded
+// result to disk keyed by path + size + mtime + file size, so the first
+// visit pays the cost once and every later visit reads a small JPEG straight
+// off disk. JPEG (not PNG) because these are photos — no alpha, and the
+// encode + the base64 string sent over IPC are both several times smaller.
+const THUMB_CACHE_DIR = join(app.getPath('userData'), 'photo-thumb-cache')
+let _thumbCacheReady = null
+function ensureThumbCacheDir() {
+  if (!_thumbCacheReady) _thumbCacheReady = mkdir(THUMB_CACHE_DIR, { recursive: true }).catch(() => {})
+  return _thumbCacheReady
+}
+
+async function thumbnailFor(path, size) {
+  let key
+  try {
+    const st = await stat(path)
+    key = createHash('sha1').update(`${path}|${size}|${st.mtimeMs}|${st.size}`).digest('hex')
+  } catch {
+    return null // file vanished between listing and request
+  }
+  const cacheFile = join(THUMB_CACHE_DIR, `${key}.jpg`)
+  try {
+    const buf = await readFile(cacheFile)
+    return `data:image/jpeg;base64,${buf.toString('base64')}`
+  } catch { /* cache miss — generate below */ }
+
+  try {
+    const img = await nativeImage.createThumbnailFromPath(path, { width: size, height: size })
+    const buf = img.toJPEG(72)
+    ensureThumbCacheDir().then(() => writeFile(cacheFile, buf).catch(() => {}))
+    return `data:image/jpeg;base64,${buf.toString('base64')}`
+  } catch (err) {
+    console.error('[photos] thumbnail failed:', path, err.message)
+    return null
+  }
+}
+
+// Warm the thumbnail cache in the background so the Photos grid is already
+// populated the first time she opens it after a boot. Runs gently (narrow
+// concurrency, deferred start) and is cheap on later boots — every already
+// cached photo is just one small readFile. Safe to call more than once.
+let _prewarmRunning = false
+export function prewarmPhotoThumbnails({ delayMs = 8000 } = {}) {
+  if (_prewarmRunning) return
+  _prewarmRunning = true
+  setTimeout(async () => {
+    try {
+      const photos = await listLocalPhotos()
+      if (!photos.length) return
+      const CONCURRENCY = 3
+      let i = 0
+      async function worker() {
+        while (i < photos.length) {
+          const p = photos[i++]
+          await thumbnailFor(p.path, 400)  // launcher grid size
+          await thumbnailFor(p.path, 200)  // admin caption-editor size
+        }
+      }
+      await Promise.all(Array.from({ length: CONCURRENCY }, worker))
+      console.log(`[photos] thumbnail cache warmed for ${photos.length} photo(s)`)
+    } catch (err) {
+      console.warn('[photos] thumbnail prewarm failed:', err.message)
+    } finally {
+      _prewarmRunning = false
+    }
+  }, delayMs)
+}
+
+// Shared by the launcher's Photos view and the admin caption editor so both
+// see the same file list from the same folder in the same shape.
+async function listLocalPhotos(pathOverride) {
+  const localPath = typeof pathOverride === 'string'
+    ? pathOverride.trim()
+    : (store.get('photos.localPath') ?? '')
+  if (!localPath) return []
+  try {
+    const files  = await readdir(localPath)
+    const images = files.filter(f => /\.(png|jpg|jpeg|gif|webp|bmp)$/i.test(f))
+    return images.map(file => {
+      const abs = join(localPath, file)
+      return {
+        name: file,
+        path: abs,
+        url: `file://${abs.replace(/\\/g, '/')}`
+      }
+    })
+  } catch (err) {
+    console.error('[photos] Error reading local photos folder:', err)
+    return []
+  }
+}
+
 // ── Claude (Anthropic Messages API) — shared by Buddy chat + caregiver digest ──
 function claudeKey() {
   return store.get('ai.anthropicKey') || process.env.ANTHROPIC_API_KEY
@@ -38,7 +134,7 @@ function claudeModel() {
   return store.get('ai.model') || 'claude-haiku-4-5'
 }
 
-async function callClaude(system, messages, maxTokens = 300) {
+async function callClaude(system, messages, maxTokens = 300, timeoutMs = 30_000) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -46,7 +142,8 @@ async function callClaude(system, messages, maxTokens = 300) {
       'anthropic-version': '2023-06-01',
       'content-type': 'application/json'
     },
-    body: JSON.stringify({ model: claudeModel(), max_tokens: maxTokens, system, messages })
+    body: JSON.stringify({ model: claudeModel(), max_tokens: maxTokens, system, messages }),
+    signal: AbortSignal.timeout(timeoutMs)
   })
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}))
@@ -94,6 +191,7 @@ export function registerIPC() {
     photos: store.get('photos'),
     familyRadio: store.get('familyRadio'),
     userName: store.get('userName'),
+    whosHome: store.get('whosHome'),
     ai: { available: !!(store.get('ai.anthropicKey') || process.env.ANTHROPIC_API_KEY) }
   }))
 
@@ -115,19 +213,7 @@ export function registerIPC() {
     closeEmbeddedBrowser()
   })
 
-  ipcMain.on('launcher:browser-back', () => {
-    if (embeddedView) {
-      if (embeddedView.webContents.canGoBack()) {
-        embeddedView.webContents.goBack()
-      } else {
-        // Nothing to go back to (SPA or first page) — close browser and go home
-        closeEmbeddedBrowser()
-        if (launcherWin && !launcherWin.isDestroyed()) {
-          launcherWin.webContents.send('launcher:go-home')
-        }
-      }
-    }
-  })
+  ipcMain.on('launcher:browser-back', () => browserGoBack())
 
   ipcMain.on('launcher:set-browser-nav-width', (event, navWidthPx) => {
     // Reposition BrowserView to account for nav bar width
@@ -287,7 +373,36 @@ RULES:
       const reply = await callClaude(systemPrompt, [...chat, { role: 'user', content: message }])
       const updated = [...history, { role: 'user', content: message }, { role: 'assistant', content: reply }]
       setAIHistory(updated)
-      return { reply }
+
+      // Suggestions are optional decoration. Generate them after returning the
+      // primary answer so a slow second request can never leave Buddy stuck on
+      // the typing indicator.
+      const sender = event.sender
+      const suggestionRequestId = crypto.randomUUID()
+      void (async () => {
+        try {
+          const suggSystem = `You suggest short, simple, tap-friendly follow-up prompts for an elderly woman using a friendly computer companion called Buddy. Given the assistant's most recent reply, propose 3 very short (2-5 words) things she could say next by tapping a button. Keep them kind, useful, and easy to understand. Respond with ONLY a JSON array of strings, for example: ["Tell me a joke","How is the weather?","Play a game"]. No other text.`
+          const raw = await callClaude(
+            suggSystem,
+            [{ role: 'user', content: `Assistant's last reply: ${reply}` }],
+            80,
+            5_000
+          )
+          const parsed = JSON.parse(raw)
+          if (!Array.isArray(parsed)) return
+          const suggestions = parsed
+            .filter(s => typeof s === 'string' && s.trim())
+            .slice(0, 4)
+            .map(s => s.trim().slice(0, 60))
+          if (suggestions.length && !sender.isDestroyed()) {
+            sender.send('launcher:ai-suggestions', { requestId: suggestionRequestId, suggestions })
+          }
+        } catch {
+          // Keep the existing fallback chips; the answer has already arrived.
+        }
+      })()
+
+      return { reply, suggestionRequestId }
     } catch (err) {
       console.error('[ask-ai] error:', err)
       return { error: err.message }
@@ -302,6 +417,10 @@ RULES:
   ipcMain.handle('launcher:get-ai-history', () => {
     return getAIHistory()
   })
+
+  // ── Who's Home? (LAN presence via AT&T gateway + ARP fallback) ──────────────
+  ipcMain.handle('launcher:scan-lan', () => scanWhosHome())
+  ipcMain.handle('admin:scan-lan', () => scanWhosHome())
 
   // ── Cloud TTS (Edge natural voices) ───────────────────────────────────────
   ipcMain.handle('launcher:tts-speak', async (event, { text }) => {
@@ -354,36 +473,38 @@ RULES:
   })
 
   ipcMain.handle('launcher:get-local-photos', async () => {
-    const localPath = store.get('photos.localPath') ?? ''
-    if (!localPath) return []
-    try {
-      const files = await readdir(localPath)
-      const images = files.filter(f => /\.(png|jpg|jpeg|gif|webp|bmp)$/i.test(f))
-      return images.map(file => {
-        const abs = join(localPath, file)
-        return {
-          name: file,
-          path: abs,
-          url: `file://${abs.replace(/\\/g, '/')}`
-        }
-      })
-    } catch (err) {
-      console.error('[photos] Error reading local photos folder:', err)
-      return []
-    }
+    const captions = store.get('photos.captions') || {}
+    const photos   = await listLocalPhotos()
+    return photos.map(p => ({ ...p, caption: captions[p.name] || '' }))
   })
 
-  // Generate a small thumbnail for a photo. Rendering full-resolution images
+  // Admin panel needs the same listing to build the caption editor —
+  // captions themselves are saved through the normal admin:set('photos', …).
+  ipcMain.handle('admin:get-local-photos', async (_, { path } = {}) => listLocalPhotos(path))
+
+  // Small, disk-cached thumbnail for a photo. Rendering full-resolution images
   // into a grid decodes huge bitmaps into memory (slow, can stall the UI);
-  // native thumbnails are fast (Windows shell thumbnail cache) and lightweight.
-  ipcMain.handle('launcher:get-photo-thumbnail', async (_, { path }) => {
-    try {
-      const img = await nativeImage.createThumbnailFromPath(path, { width: 400, height: 400 })
-      return img.toDataURL()
-    } catch (err) {
-      console.error('[photos] thumbnail failed:', path, err.message)
-      return null
+  // these are downscaled once and reused from disk on every later visit.
+  ipcMain.handle('launcher:get-photo-thumbnail', (_, { path }) => thumbnailFor(path, 400))
+
+  // Same generator, exposed to the admin caption editor (smaller size).
+  ipcMain.handle('admin:get-photo-thumbnail', (_, { path }) => thumbnailFor(path, 200))
+
+  // Ctrl+= / Ctrl+- in the launcher nudges the whole-UI font scale one step and
+  // persists it, so a caregiver can size the text from the couch without
+  // opening the admin panel. Only this one key is writable from the launcher.
+  ipcMain.handle('launcher:nudge-font-scale', (_, { dir }) => {
+    const STEPS = ['small', 'medium', 'large', 'xlarge', 'xxlarge']
+    const cur = store.get('display.fontScale') || 'medium'
+    const next = STEPS[Math.min(STEPS.length - 1, Math.max(0, STEPS.indexOf(cur) + (dir > 0 ? 1 : -1)))]
+    if (next !== cur) {
+      saveBackup()
+      store.set('display.fontScale', next)
+      if (launcherWin && !launcherWin.isDestroyed()) {
+        launcherWin.webContents.send('launcher:config-updated', { key: 'display', value: store.get('display') })
+      }
     }
+    return { fontScale: next }
   })
 
   // ── Admin ─────────────────────────────────────────────────────────────────
@@ -410,6 +531,39 @@ RULES:
       return { digest, generatedAt: Date.now(), entryCount: recent.length }
     } catch (err) {
       console.error('[digest] error:', err)
+      return { error: err.message }
+    }
+  })
+
+  // Draft a caption for one local photo with Claude's vision model. Returns a
+  // plain description the caregiver edits (to add real names) before saving —
+  // the model can't know who anyone is, but "An older woman and two children
+  // on a beach" is most of the work done.
+  ipcMain.handle('admin:generate-caption', async (_, { path }) => {
+    if (!claudeKey()) return { error: 'no-key' }
+    let dataB64
+    try {
+      const img = await nativeImage.createThumbnailFromPath(path, { width: 1024, height: 1024 })
+      dataB64 = img.toJPEG(80).toString('base64')
+    } catch (err) {
+      console.error('[caption] could not read photo:', path, err.message)
+      return { error: 'unreadable-image' }
+    }
+    try {
+      const caption = await callClaude(
+        `You write short, warm captions for family photos shown to an elderly woman with memory loss. ` +
+        `Reply with ONE caption of at most 14 words — no quotes, no preamble. Describe who and where: ` +
+        `approximate ages and relationships you can infer ("an older man", "a young girl"), the setting, ` +
+        `and the occasion if it's obvious. Do not invent names.`,
+        [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: dataB64 } },
+          { type: 'text', text: 'Write the caption for this photo.' }
+        ]}],
+        80
+      )
+      return { caption: caption.trim().replace(/^["']|["']$/g, '') }
+    } catch (err) {
+      console.error('[caption] error:', err)
       return { error: err.message }
     }
   })
@@ -646,6 +800,34 @@ function openEmbeddedBrowser(url, partition = null) {
     }
   })
 
+  // Keyboard shortcuts for the Back and Home buttons. While she's on a website
+  // the BrowserView holds keyboard focus, so the launcher renderer never sees
+  // these keys — they must be intercepted here in the main process.
+  //   Alt+Left  → Back  (same as the on-screen Back button; also overrides
+  //               Chromium's built-in Alt+Left so "no history left" still
+  //               closes the browser and goes home)
+  //   Alt+Down  → Home  (same as the on-screen Home button)
+  //   Alt+Up    → Home, then open the "choose a screen" picker
+  // Bare Escape is deliberately left alone here — websites use it (exit
+  // fullscreen video, close their own dialogs) and hijacking it would be a
+  // surprise. Alt+Left already gets her out.
+  view.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !input.alt) return
+    if (input.key === 'ArrowLeft') {
+      event.preventDefault()
+      browserGoBack()
+    } else if (input.key === 'ArrowDown') {
+      event.preventDefault()
+      forceGoHome()
+    } else if (input.key === 'ArrowUp') {
+      event.preventDefault()
+      forceGoHome()
+      if (launcherWin && !launcherWin.isDestroyed()) {
+        launcherWin.webContents.send('launcher:open-tile-picker')
+      }
+    }
+  })
+
   // Signal renderer on every page load and inject site-specific CSS
   view.webContents.on('did-finish-load', () => {
     if (launcherWin && !launcherWin.isDestroyed()) {
@@ -663,6 +845,22 @@ function openEmbeddedBrowser(url, partition = null) {
   // Start inactivity watch
   lastBrowserActivity = Date.now()
   startBrowserViewInactivityTimer()
+}
+
+// Back button / Alt+Left: step back through the page's history, or if there is
+// nowhere left to go (SPA or the first page) close the browser and return to the
+// home screen. Shared by the on-screen Back button (via IPC) and the keyboard
+// shortcut intercepted on the BrowserView in openEmbeddedBrowser().
+function browserGoBack() {
+  if (!embeddedView) return
+  if (embeddedView.webContents.canGoBack()) {
+    embeddedView.webContents.goBack()
+  } else {
+    closeEmbeddedBrowser()
+    if (launcherWin && !launcherWin.isDestroyed()) {
+      launcherWin.webContents.send('launcher:go-home')
+    }
+  }
 }
 
 export function closeEmbeddedBrowser() {
@@ -729,5 +927,228 @@ function stopBrowserViewInactivityTimer() {
   if (browserViewInactivityTimer) {
     clearInterval(browserViewInactivityTimer)
     browserViewInactivityTimer = null
+  }
+}
+
+// ── Who's Home? network helpers ──────────────────────────────────────────────
+
+function stripTags(s) {
+  return (s || '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function normMac(s) {
+  return (s || '').toLowerCase().replace(/[^a-f0-9]/g, '')
+}
+
+function isWifi(type) {
+  return /wi-?fi|wireless|802\.11/i.test(type || '')
+}
+
+// Parse the AT&T gateway /cgi-bin/devices.ha page into device records.
+function parseDevicesHtml(html) {
+  const blocks = html.split(/<hr[^>]*class="reshr"[^>]*>/i)
+  const devices = []
+  for (const block of blocks) {
+    const pairs = {}
+    const re = /<td[^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>/gi
+    let m
+    while ((m = re.exec(block))) {
+      const label = stripTags(m[1])
+      const value = stripTags(m[2])
+      if (label) pairs[label] = value
+    }
+    if (!pairs['MAC Address']) continue
+    let name = pairs['Name'] || ''
+    let ip = pairs['IPv4 Address'] || ''
+    const combo = pairs['IPv4 Address / Name']
+    if (combo) {
+      const [cIp, cName] = combo.split('/')
+      if (!ip && cIp) ip = cIp.trim()
+      if (!name && cName) name = cName.trim()
+    }
+    const speedNum = parseInt(String(pairs['Connection Speed'] || '').replace(/[^\d]/g, ''), 10)
+    let signal = null
+    if (isWifi(pairs['Connection Type']) && speedNum) {
+      signal = speedNum >= 200 ? 'Strong' : speedNum >= 80 ? 'Good' : 'Weak'
+    }
+    devices.push({
+      mac: pairs['MAC Address'],
+      name,
+      ip,
+      connectionType: pairs['Connection Type'] || '',
+      signalLabel: signal,
+      signalValue: speedNum || null,
+      online: /on|online|connected|active|yes/i.test(pairs['Status'] || '')
+    })
+  }
+  return devices
+}
+
+// Run an async fn over items with bounded concurrency.
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length)
+  let i = 0
+  async function worker() {
+    while (i < items.length) {
+      const idx = i++
+      out[idx] = await fn(items[idx])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return out
+}
+
+function execPromise(cmd, opts = {}) {
+  return new Promise(resolve => {
+    exec(cmd, opts, (err, stdout) => resolve({ err, stdout: stdout || '' }))
+  })
+}
+
+async function detectGateway() {
+  const { stdout } = await execPromise('ipconfig')
+  for (const line of stdout.split('\n')) {
+    const m = line.match(/Default Gateway[ .:]*\s*([\d.]+)/i)
+    if (m && m[1] && m[1] !== '0.0.0.0') return m[1]
+  }
+  return '192.168.1.254'
+}
+
+async function localIp() {
+  const { stdout } = await execPromise('ipconfig')
+  const m = stdout.match(/IPv4 Address[ .:]*\s*([\d.]+)/i)
+  return m ? m[1] : '192.168.1.23'
+}
+
+// Read-only fetch of the AT&T gateway device list (no auth required).
+async function fetchAttDevices(gateway) {
+  const res = await fetch(`http://${gateway}/cgi-bin/devices.ha`, { signal: AbortSignal.timeout(5000) })
+  if (!res.ok) throw new Error(`devices.ha ${res.status}`)
+  const html = await res.text()
+  if (!/MAC Address/i.test(html)) throw new Error('not-att-gateway')
+  return parseDevicesHtml(html)
+}
+
+function pingName(ip) {
+  return new Promise(resolve => {
+    exec(`ping -a -n 1 -w 250 ${ip}`, { timeout: 4000 }, (err, stdout) => {
+      const m = stdout.match(/Pinging\s+(.+?)\s+\[([\d.]+)\]/i)
+      if (!m) return resolve(null)
+      const name = m[1].trim()
+      const resolvedIp = m[2]
+      if (name === resolvedIp) return resolve(null) // no hostname resolved
+      resolve({
+        ip: resolvedIp,
+        name,
+        mac: '',
+        connectionType: '',
+        signalLabel: null,
+        signalValue: null,
+        online: true
+      })
+    })
+  })
+}
+
+async function arpMacs() {
+  const { stdout } = await execPromise('arp -a')
+  const map = {}
+  const re = /([\d.]+)\s+([\da-f-]{17})\s+/gi
+  let m
+  while ((m = re.exec(stdout))) map[m[1]] = m[2]
+  return map
+}
+
+// Best-effort name-based presence scan (no signal data) for non-AT&T routers.
+async function arpScan() {
+  const local = await localIp()
+  const base = local.split('.').slice(0, 3).join('.')
+  const ips = []
+  for (let i = 1; i <= 254; i++) ips.push(`${base}.${i}`)
+  await mapLimit(ips, 40, ip => new Promise(res => {
+    exec(`ping -n 1 -w 150 ${ip}`, { timeout: 2500 }, () => res())
+  }))
+  const macMap = await arpMacs()
+  const foundIps = Object.keys(macMap).filter(ip => ip !== local)
+  const named = await mapLimit(foundIps, 20, ip => pingName(ip))
+  // Reverse-DNS names are optional on home networks. Preserve every ARP
+  // device so caregivers can reliably match the MAC address even when a phone
+  // does not publish a hostname.
+  return foundIps.map((ip, index) => {
+    const resolved = named[index]
+    return {
+      ip,
+      name: resolved?.name || '',
+      mac: macMap[ip] || '',
+      connectionType: '',
+      signalLabel: null,
+      signalValue: null,
+      online: true
+    }
+  })
+}
+
+function matchPeople(devices, people) {
+  return (people || []).map(p => {
+    const want = (p.device || '').trim().toLowerCase()
+    if (!want) {
+      return { name: p.name, device: p.device, configured: false, home: false }
+    }
+    const macWant = want.replace(/[^a-f0-9]/g, '')
+    const match = devices.find(d => {
+      const nm = (d.name || '').toLowerCase()
+      const mac = normMac(d.mac)
+      return nm.includes(want) || (macWant && mac && mac.includes(macWant))
+    })
+    return {
+      name: p.name,
+      device: p.device,
+      configured: true,
+      home: !!match && match.online !== false,
+      connectionType: match?.connectionType || null,
+      signalLabel: match?.signalLabel || null,
+      signalValue: match?.signalValue || null,
+      ip: match?.ip || null,
+      mac: match?.mac || null,
+      matchedName: match?.name || null
+    }
+  })
+}
+
+async function scanWhosHome() {
+  const cfg = store.get('whosHome') || {}
+  const people = cfg.people || []
+  const gateway = cfg.gateway || await detectGateway()
+  let devices = []
+  let method = 'none'
+  let error = null
+  try {
+    devices = await fetchAttDevices(gateway)
+    method = 'att'
+  } catch (e) {
+    try {
+      devices = await arpScan()
+      method = 'arp'
+    } catch (e2) {
+      error = 'Could not reach the network'
+    }
+  }
+  return {
+    method,
+    gateway,
+    people: matchPeople(devices, people),
+    discovered: devices.map(d => ({
+      name: d.name,
+      mac: d.mac,
+      ip: d.ip,
+      connectionType: d.connectionType,
+      signalLabel: d.signalLabel,
+      signalValue: d.signalValue,
+      online: d.online
+    })),
+    error
   }
 }

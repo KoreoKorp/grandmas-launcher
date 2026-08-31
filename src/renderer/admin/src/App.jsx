@@ -13,6 +13,7 @@ import PhotosSettings from './components/PhotosSettings'
 import SetupWizard from './components/SetupWizard'
 import CaregiverHandoff from './components/CaregiverHandoff'
 import AIDailyDigest from './components/AIDailyDigest'
+import WhosHomeSettings from './components/WhosHomeSettings'
 
 const SECTIONS = [
   {
@@ -32,6 +33,7 @@ const SECTIONS = [
     tabs: [
       { id: 'contacts',  label: 'Contacts' },
       { id: 'messenger', label: 'Messenger' },
+      { id: 'whoshome',  label: "Who's Home?" },
     ]
   },
   {
@@ -61,70 +63,6 @@ const SECTIONS = [
 
 function sectionForTab(tabId) {
   return SECTIONS.find(s => s.tabs.some(t => t.id === tabId))?.id
-}
-
-// ── PIN Gate ──────────────────────────────────────────────────────────────────
-
-function PinGate({ onUnlock }) {
-  const [entry, setEntry] = useState('')
-  const [error, setError] = useState(false)
-
-  function press(digit) {
-    if (entry.length >= 8) return
-    setEntry(prev => prev + digit)
-    setError(false)
-  }
-
-  function backspace() { setEntry(prev => prev.slice(0, -1)); setError(false) }
-
-  async function submit() {
-    const cfg = await window.admin.getConfig()
-    if (entry === cfg.adminPin) {
-      onUnlock()
-    } else {
-      setError(true)
-      setEntry('')
-    }
-  }
-
-  const dots = Array.from({ length: Math.max(entry.length, 4) }, (_, i) => (
-    <span key={i} style={{ ...pinStyles.dot, background: i < entry.length ? 'var(--accent)' : 'var(--border)' }} />
-  ))
-
-  return (
-    <div style={pinStyles.backdrop}>
-      <div style={pinStyles.card}>
-        <div style={pinStyles.title}>Admin Panel</div>
-        <div style={pinStyles.subtitle}>Enter your PIN to continue</div>
-        <div style={pinStyles.dots}>{dots}</div>
-        {error && <div style={pinStyles.error}>Incorrect PIN</div>}
-        <div style={pinStyles.grid}>
-          {['1','2','3','4','5','6','7','8','9','⌫','0','→'].map(k => (
-            <button
-              key={k}
-              style={{ ...pinStyles.key, ...(k === '→' ? pinStyles.keySubmit : {}) }}
-              onClick={() => k === '⌫' ? backspace() : k === '→' ? submit() : press(k)}
-            >
-              {k}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const pinStyles = {
-  backdrop: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'var(--bg)' },
-  card: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: '40px 48px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, minWidth: 320 },
-  title: { fontSize: '1.3em', fontWeight: 700, color: 'var(--accent)' },
-  subtitle: { fontSize: '0.9em', color: 'var(--text-dim)' },
-  dots: { display: 'flex', gap: 12, margin: '4px 0' },
-  dot: { width: 14, height: 14, borderRadius: '50%', transition: 'background 0.15s' },
-  error: { color: '#e05555', fontSize: '0.85em', fontWeight: 600 },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, width: '100%' },
-  key: { padding: '16px 0', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, fontSize: '1.2em', fontWeight: 600, cursor: 'pointer', color: 'var(--text)', transition: 'filter 0.1s' },
-  keySubmit: { background: 'var(--accent)', color: '#1C322D', border: 'none' }
 }
 
 // ── Sidebar Nav ───────────────────────────────────────────────────────────────
@@ -196,7 +134,6 @@ function SideNav({ activeTab, onSelect }) {
 
 export default function App() {
   const [config, setConfig] = useState(null)
-  const [unlocked, setUnlocked] = useState(false)
   const [activeTab, setActiveTab] = useState('tiles')
   const [helpAlert, setHelpAlert] = useState(false)
   const [showWizard, setShowWizard] = useState(false)
@@ -204,11 +141,9 @@ export default function App() {
   useEffect(() => {
     window.admin.getConfig().then(cfg => {
       setConfig(cfg)
-      if (!cfg.adminPin) {
-        setUnlocked(true)
-        // First-run: open wizard automatically if name isn't set yet
-        if (!cfg.userName) setShowWizard(true)
-      }
+      // First-run is tracked explicitly; userName has a non-empty default and
+      // therefore cannot reliably indicate whether setup was completed.
+      if (cfg.setupCompleted !== true) setShowWizard(true)
     })
 
     window.admin.onHelpAlert(() => {
@@ -219,7 +154,7 @@ export default function App() {
 
   async function save(key, value) {
     await window.admin.set(key, value)
-    // Re-fetch config to properly handle nested keys (e.g., 'ai.openrouterKey')
+    // Re-fetch config to properly handle nested keys (e.g., 'ai.anthropicKey')
     const cfg = await window.admin.getConfig()
     setConfig(cfg)
   }
@@ -230,10 +165,6 @@ export default function App() {
         Loading...
       </div>
     )
-  }
-
-  if (!unlocked) {
-    return <PinGate onUnlock={() => setUnlocked(true)} />
   }
 
   return (
@@ -279,6 +210,12 @@ export default function App() {
             <MessengerSettings
               messenger={config.messenger}
               onSave={m => save('messenger', { ...config.messenger, ...m })}
+            />
+          )}
+          {activeTab === 'whoshome' && (
+            <WhosHomeSettings
+              whosHome={config.whosHome}
+              onSave={w => save('whosHome', { ...config.whosHome, ...w })}
             />
           )}
           {activeTab === 'weather' && (

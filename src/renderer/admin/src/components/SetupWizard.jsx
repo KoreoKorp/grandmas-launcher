@@ -3,7 +3,6 @@ import React, { useState } from 'react'
 const STEPS = [
   { id: 'name',     title: "What's her name?",           desc: "Used in greetings and the daily message." },
   { id: 'location', title: 'Where does she live?',       desc: 'City or ZIP code — used to show local weather.' },
-  { id: 'adminPin', title: 'Set your admin PIN',         desc: 'You\'ll enter this to open the admin panel. 4–8 digits.' },
   { id: 'jeanPin',  title: 'Set her messenger PIN',      desc: 'Jean enters this to open Messages. Keep it simple — 4 digits is plenty.' },
   { id: 'help',     title: 'Emergency help message',     desc: "When she presses Help, what message do you want to send yourself?" },
 ]
@@ -13,7 +12,6 @@ export default function SetupWizard({ config, onSave, onClose }) {
   const [values, setValues] = useState({
     name:     config.userName        || '',
     location: config.weather?.city   || '',
-    adminPin: config.adminPin        || '',
     jeanPin:  config.messenger?.jeanPin || '',
     help:     config.help?.message   || "Jean pressed the Help button and may need assistance.",
   })
@@ -29,16 +27,15 @@ export default function SetupWizard({ config, onSave, onClose }) {
     setSaving(true)
     await onSave('userName', values.name.trim())
     await onSave('weather', { ...config.weather, city: values.location.trim() })
-    if (values.adminPin.trim()) await onSave('adminPin', values.adminPin.trim())
     await onSave('messenger', { ...config.messenger, jeanPin: values.jeanPin.trim() })
     await onSave('help', { ...config.help, message: values.help.trim() })
+    await onSave('setupCompleted', true)
     setSaving(false)
     onClose()
   }
 
   function canAdvance() {
     const v = values[current.id]?.trim()
-    if (current.id === 'adminPin') return v?.length >= 4 || v?.length === 0 // optional
     if (current.id === 'jeanPin') return v?.length >= 4 || v?.length === 0
     return true // name, location, help can be blank
   }
@@ -73,18 +70,6 @@ export default function SetupWizard({ config, onSave, onClose }) {
               value={values.location}
               onChange={e => set('location', e.target.value)}
               placeholder="e.g. Chicago, IL or 60601"
-              style={s.input}
-            />
-          )}
-          {current.id === 'adminPin' && (
-            <input
-              autoFocus
-              type="password"
-              inputMode="numeric"
-              maxLength={8}
-              value={values.adminPin}
-              onChange={e => set('adminPin', e.target.value.replace(/\D/g, ''))}
-              placeholder="4–8 digits (leave blank to skip)"
               style={s.input}
             />
           )}

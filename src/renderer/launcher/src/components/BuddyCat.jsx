@@ -10,6 +10,13 @@ const hasTTS = !!window.speechSynthesis
 const rand = (a, b) => a + Math.random() * (b - a)
 const pick = arr => arr[Math.floor(Math.random() * arr.length)]
 
+const FALLBACK_SUGGESTIONS = [
+  { label: '📷 Photos', msg: 'I want to see my photos' },
+  { label: '🎮 Games', msg: 'I want to play a game' },
+  { label: '😄 Joke', msg: 'Tell me a funny joke' },
+  { label: '☀️ Weather', msg: "What's the weather like today?" },
+]
+
 const LINES = {
   morning: [
     "Rise and shine! Want the morning news?",
@@ -55,7 +62,7 @@ function linePool() {
  * Buddy the cat — lives inline in the sidebar. A 4-layer puppet
  * (head/torso/legs/tail) with idle loops, randomized gestures, strolls,
  * petting reactions and proactive commentary; tapping "Let's chat" swaps
- * to a compact inline chat backed by the same OpenRouter pipeline as the
+ * to a compact inline chat backed by the same Claude pipeline as the
  * old full-screen AIBuddy modal.
  */
 export default function BuddyCat() {
@@ -74,6 +81,7 @@ export default function BuddyCat() {
   const [reducedMotion, setReducedMotion] = useState(
     () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
   )
+  const [suggestions, setSuggestions] = useState(FALLBACK_SUGGESTIONS)
 
   const scrollRef = useRef(null)
   const rigRef = useRef(null)
@@ -87,6 +95,7 @@ export default function BuddyCat() {
   const bubbleTimerRef = useRef(null)
   const hideTimerRef = useRef(null)
   const moodTimerRef = useRef(null)
+  const suggestionRequestRef = useRef(null)
   const modeRef = useRef(mode)
   modeRef.current = mode
 
@@ -213,6 +222,12 @@ export default function BuddyCat() {
 
   /* ── Chat plumbing ── */
   useEffect(() => {
+    const unsubscribeSuggestions = window.launcher.onAISuggestions?.(data => {
+      if (data?.requestId === suggestionRequestRef.current &&
+          Array.isArray(data.suggestions) && data.suggestions.length) {
+        setSuggestions(data.suggestions)
+      }
+    })
     window.launcher.getAIHistory().then(history => {
       if (history && history.length > 0) {
         setMessages(history
@@ -227,6 +242,7 @@ export default function BuddyCat() {
       window.speechSynthesis?.cancel()
       clearTimeout(hideTimerRef.current)
       clearTimeout(moodTimerRef.current)
+      unsubscribeSuggestions?.()
     }
   }, [])
 
@@ -304,17 +320,20 @@ export default function BuddyCat() {
     setMessages(prev => [...prev, { role: 'user', content: text.trim() }])
     setInput('')
     setLoading(true)
+    suggestionRequestRef.current = null
+    setSuggestions(FALLBACK_SUGGESTIONS)
     const result = await window.launcher.askAI(text.trim())
     setLoading(false)
     let reply
     if (result.error === 'no-key') {
-      reply = "Oh dear, I'm not set up yet! Ask a family member to add an OpenRouter API key in the Admin Panel. Then I can help!"
+      reply = "Oh dear, I'm not set up yet! Ask a family member to add a Claude API key in the Admin Panel. Then I can help!"
     } else if (result.error) {
       // Surface the real reason (bad key, no credits, rate limit...) so
       // caregivers can actually diagnose it instead of a generic shrug.
       reply = `I'm having trouble connecting — ${result.error}`
     } else {
       reply = result.reply
+      suggestionRequestRef.current = result.suggestionRequestId || null
     }
     setMessages(prev => [...prev, { role: 'assistant', content: reply }])
     if (autoSpeak) speak(reply)
@@ -322,6 +341,8 @@ export default function BuddyCat() {
 
   function clearChat() {
     window.launcher.clearAIHistory()
+    suggestionRequestRef.current = null
+    setSuggestions(FALLBACK_SUGGESTIONS)
     setMessages([{ role: 'assistant', content: greeting() }])
   }
 
@@ -367,13 +388,6 @@ export default function BuddyCat() {
     moodTimerRef.current = setTimeout(() => setMood(moodFor(new Date().getHours())), 2200)
     say(pick(PET_LINES), 2600)
   }
-
-  const suggestions = [
-    { label: '📷 Photos', msg: 'I want to see my photos' },
-    { label: '🎮 Games', msg: 'I want to play a game' },
-    { label: '😄 Joke', msg: 'Tell me a funny joke' },
-    { label: '☀️ Weather', msg: "What's the weather like today?" },
-  ]
 
   return (
     <div className={reducedMotion ? 'bc-zone bc-reduced' : 'bc-zone'} style={S.zone}>
@@ -456,13 +470,15 @@ export default function BuddyCat() {
           )}
         </div>
 
-        {messages.length <= 1 && (
-          <div style={S.chips}>
-            {suggestions.map((s, i) => (
-              <button key={i} style={S.chip} onClick={() => sendMessage(s.msg)}>{s.label}</button>
-            ))}
-          </div>
-        )}
+        <div style={S.chips}>
+          {suggestions.map((s, i) => {
+            const msg = typeof s === 'string' ? s : s.msg
+            const label = typeof s === 'string' ? s : s.label
+            return (
+              <button key={i} style={S.chip} onClick={() => sendMessage(msg)}>{label}</button>
+            )
+          })}
+        </div>
 
         <div style={S.inputRow}>
           {hasSpeechRecognition && (

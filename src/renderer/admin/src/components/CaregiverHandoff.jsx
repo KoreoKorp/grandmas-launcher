@@ -113,7 +113,7 @@ export default function CaregiverHandoff({ onImportComplete }) {
       <div className="card" style={{ color: 'var(--text-dim)', fontSize: '0.88em', lineHeight: 1.6 }}>
         <strong style={{ color: 'var(--text)' }}>What's included in the export?</strong>
         <p style={{ marginTop: 8 }}>
-          Everything: home screen tiles, contacts, messenger PIN, admin PIN, display settings, weather location,
+          Everything: home screen tiles, contacts, messenger PIN, display settings, weather location,
           games, photos folder, safety settings, and Jean's daily message. Passwords are included in plain text —
           store the file somewhere private.
         </p>

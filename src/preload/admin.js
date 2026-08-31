@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('admin', {
   getConfig: () => ipcRenderer.invoke('admin:get-config'),
+  scanLan: () => ipcRenderer.invoke('admin:scan-lan'),
   set: (key, value) => ipcRenderer.invoke('admin:set', { key, value }),
   getActivityLog: () => ipcRenderer.invoke('admin:get-activity-log'),
   clearActivityLog: () => ipcRenderer.invoke('admin:clear-activity-log'),
@@ -10,6 +11,9 @@ contextBridge.exposeInMainWorld('admin', {
   pickImage: () => ipcRenderer.invoke('admin:pick-image'),
   pickFolder: () => ipcRenderer.invoke('admin:pick-folder'),
   pickApp: () => ipcRenderer.invoke('admin:pick-app'),
+  getLocalPhotos: (path) => ipcRenderer.invoke('admin:get-local-photos', { path }),
+  getPhotoThumbnail: (path) => ipcRenderer.invoke('admin:get-photo-thumbnail', { path }),
+  generateCaption: (path) => ipcRenderer.invoke('admin:generate-caption', { path }),
 
   getMessengerInfo: () => ipcRenderer.invoke('admin:get-messenger-info'),
   generateDigest: () => ipcRenderer.invoke('admin:generate-digest'),

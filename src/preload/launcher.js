@@ -2,10 +2,12 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('launcher', {
   getConfig: () => ipcRenderer.invoke('launcher:get-config'),
+  scanLan: () => ipcRenderer.invoke('launcher:scan-lan'),
   getWeather: () => ipcRenderer.invoke('launcher:get-weather'),
   openUrl: (url, kiosk = false, partition = null) => ipcRenderer.send('launcher:open-url', { url, kiosk, partition }),
   closeBrowser: () => ipcRenderer.send('launcher:close-browser'),
   browserBack: () => ipcRenderer.send('launcher:browser-back'),
+  nudgeFontScale: (dir) => ipcRenderer.invoke('launcher:nudge-font-scale', { dir }),
   setBrowserNavWidth: (px) => ipcRenderer.send('launcher:set-browser-nav-width', px),
   helpPressed: () => ipcRenderer.send('launcher:help-pressed'),
   sendHelpNotification: () => ipcRenderer.send('launcher:send-help-notification'),
@@ -18,6 +20,11 @@ contextBridge.exposeInMainWorld('launcher', {
   askAI: (message) => ipcRenderer.invoke('launcher:ask-ai', { message }),
   clearAIHistory: () => ipcRenderer.invoke('launcher:clear-ai-history'),
   getAIHistory: () => ipcRenderer.invoke('launcher:get-ai-history'),
+  onAISuggestions: (cb) => {
+    const h = (_, data) => cb(data)
+    ipcRenderer.on('launcher:ai-suggestions', h)
+    return () => ipcRenderer.removeListener('launcher:ai-suggestions', h)
+  },
   speakTTS: (text) => ipcRenderer.invoke('launcher:tts-speak', { text }),
   ttsInfo: () => ipcRenderer.invoke('launcher:tts-voices'),
   getGameIcon: (path) => ipcRenderer.invoke('launcher:get-game-icon', { path }),
@@ -48,6 +55,11 @@ contextBridge.exposeInMainWorld('launcher', {
     const h = () => cb()
     ipcRenderer.on('launcher:go-home', h)
     return () => ipcRenderer.removeListener('launcher:go-home', h)
+  },
+  onOpenTilePicker: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on('launcher:open-tile-picker', h)
+    return () => ipcRenderer.removeListener('launcher:open-tile-picker', h)
   },
   onInactivityTimeout: (cb) => {
     const h = () => cb()
